@@ -6,23 +6,24 @@ const path = require("path")
 const fs = require("fs")
 
 //const fileName = "SmartContract.sol"
-const contractName = "SmartContract"
-const compileTo = "../project-6/src/artifacts"
+const contractNames = [ "Types", "Users", "Products", "RFQs"]
+exports.contractNames = contractNames
 
-function compile(contractName, compileTo) {
-    // Read the Solidity source code from the file system
-    let fileName = `${contractName}.sol`
-    const contractPath = path.join(__dirname, fileName)
-    const sourceCode = fs.readFileSync(contractPath, "utf8")
+const compileTo = "./compiled"//"../project-6/src/artifacts"
 
-    // solc compiler config
-    const input = {
+function getInput(contractNames) {
+
+    let sources = {}
+    for(let i = 0; i < contractNames.length; i++) {
+        let fileName = `${contractNames[i]}.sol`
+        let contractPath = path.join(__dirname + "/contracts", fileName)
+        let sourceCode =  fs.readFileSync(contractPath, "utf8")
+        sources[fileName] = {content: sourceCode}
+    }
+    
+    let input = {
         language: "Solidity",
-        sources: {
-            [fileName]: {
-                content: sourceCode,
-            },
-        },
+        sources: sources,
         settings: {
             outputSelection: {
                 "*": {
@@ -32,6 +33,19 @@ function compile(contractName, compileTo) {
         },
     }
 
+    return input
+}
+
+let input = getInput(contractNames)
+
+//console.log(input)
+
+contractNames.forEach((c) => compile(c, compileTo, input))
+
+function compile(contractName, compileTo, input) {
+    // Read the Solidity source code from the file system
+    let fileName = `${contractName}.sol`
+    console.log(contractName)
     let compileToPath = compileTo == "" ? __dirname : compileTo
 
     // Compile the Solidity code using solc
@@ -49,7 +63,7 @@ function compile(contractName, compileTo) {
     fs.writeFileSync(bytecodePath, bytecode)
 
     // Log the compiled contract code to the console
-    console.log("Contract Bytecode:\n", bytecode)
+    //console.log("Contract Bytecode:\n", bytecode)
 
     // Get the ABI from the compiled contract
     const abi = compiledCode.contracts[fileName][contractName].abi
@@ -66,10 +80,9 @@ function compile(contractName, compileTo) {
     fs.writeFileSync(AbiBytecodePath, JSON.stringify(AbiBytecode, null, "\t"))
 
     // Log the Contract ABI to the console
-    console.log("Contract ABI:\n", abi)
+    //console.log("Contract ABI:\n", abi)
 
 }
 
-compile(contractName, compileTo)
 
 
