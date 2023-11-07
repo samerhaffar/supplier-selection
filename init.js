@@ -5,37 +5,163 @@ without having to make so many inputs on each new dpeloyment.
 const { Web3 } = require('web3'); //  web3.js has native ESM builds and (`import Web3 from 'web3'`)
 const fs = require("fs")
 
-const USER_TYPE = {
-    BUYER: 0,
-    SELLER: 1
-}
+const KPIs = new Map()
+KPIs.set(
+    "Product", 
+    [
+        "Inventory/Quarter",
+        "Total Price",
+        "Minimum Quantity", //The less, the more agile
+        "Lead Time",
+        "Shipping Lead Time", //The less, the more agile
+        "Total Customizations",
+        "Average Minimum Quantity"
+    ]
+)
+
+KPIs.set(
+    "Certifications", 
+    [
+        "Six Sigma Certificate",
+        "Quality Certificat",
+        "Safety Certificate"
+    ]
+)
+
+KPIs.set(
+    "Environmental", 
+    [
+        "CO2 Emissions",
+        "Environmental Audit",
+        "Carbon Tax"
+    ]
+)
+
+KPIs.set(
+    "Payment Terms", 
+    [
+        "No Installments",
+        "Down Payment", //percent
+    ]
+)
+
+KPIs.set(
+    "After-Sale Service", 
+    [
+        "No Years Guarantee",
+        "No Years Free Guarantee",
+        "Maintenance Shipping Costs",
+        "Technical Support",
+        "Guarantee Cost per Year"
+    ]
+)
+
+KPIs.set(
+    "Leagility", 
+    [
+        "Leagility"
+    ]
+)
+
+var kpis = []
+var kpiGroups = []
+
+/*
+    //product kpis
+    uint totalPrice;
+    uint totalLeadTime; //will require a formula that calculates it by choosing the max(leadTime) of all products, assuming work starts on all of them at the same date
+    uint totalShippingTime; //same as above, max(shippingTime)
+    uint totalInventory;
+    uint totalCustomizations;
+    uint averageMinimumQuantity;
+
+    //certifications
+    bool sixSigmaCert;
+    bool qualityCert;
+    bool safetyCert;
+
+    //payment terms
+    uint downPayment;
+    uint noInstallments;
+    bool installmentMode; //before receipt, after receipt (after is positive)
+    uint paymentDurationDays; //how much time we have until we issue payment
+
+    //after sale terms
+    bool technicalSupport;
+    uint noYearsGuarantee;
+    uint noYearsFreeGuarantee;
+    uint costPerYearSupport;
+
+    //bid leagility
+    uint leagility;
+    
+    //bid rating
+    uint supplierScore; //1-10 NPS, updates supplier's total rating 
+    uint buyerScore;
+    uint supplierComments;
+    uint buyerComments;
+
+    //after sale rating
+    uint afterSaleBuyerScore;
+    uint afterSaleScoreComments;
+*/
 
 const countries = [
-    "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Côte d'Ivoire", "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo (Congo-Brazzaville)", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czechia (Czech Republic)", "Democratic Republic of the Congo", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Holy See", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar (formerly Burma)", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Palestine State", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States of America", "Uruguay", "Uzbekistan", "Vanuatu", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"
+    "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", 
+    "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", 
+    "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", 
+    "Burkina Faso", "Burundi", "Côte d'Ivoire", "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Republic", 
+    "Chad", "Chile", "China", "Colombia", "Comoros", "Congo (Congo-Brazzaville)", "Costa Rica", "Croatia", "Cuba", "Cyprus", 
+    "Czechia (Czech Republic)", "Democratic Republic of the Congo", "Denmark", "Djibouti", "Dominica", "Dominican Republic", 
+    "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", 
+    "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", 
+    "Guyana", "Haiti", "Holy See", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", 
+    "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", 
+    "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", 
+    "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco",
+    "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar (formerly Burma)", "Namibia", "Nauru", "Nepal", "Netherlands",
+    "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway", "Oman", "Pakistan", "Palau",
+    "Palestine State", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar",
+    "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", 
+    "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", 
+    "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", 
+    "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", 
+    "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", 
+    "United Arab Emirates", "United Kingdom", "United States of America", "Uruguay", "Uzbekistan", "Vanuatu", 
+    "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"
 ]
 
 const usersData = []
 const productsData = []
-const noBuyers = 3
-const noSellers = 7
-const noProductsPerSeller = {min: 1, max: 10}
+const noBuyers = 5
+const noSellers = 5
+const noProductsPerSeller = {min: 1, max: 3}
 const noVerifiedUsers = 17
 
-const noRfqsPerBuyer = { min: 2, max: 2 }
+const noRfqsPerBuyer = { min: 1, max: 5 }
 const noProductsPerRfq =  { min: 1, max: 3 }
-const noKpisPerRfq =  { min: 3, max:3 } //max cannot be more than kpis.length
+const noKpisPerRfq =  { min: 5, max: 5 } //max cannot be more than kpis.length
+
+const noBidsPerRFQ = { min: 1, max: 3 }
+const noFilesPerBid = { min: 1, max: 10 }
 
 const txReceipts = []
 
 const logs = {
     authorityAccount: false,
     contractDeployment: false,
-    userRegistration: false,
+    userRegistration: true,
     addingRfqs: true,
     addingRfqProducts: false,
     addingRfqKpis: false,
+    addingBids: true,
+    addingBidsVerbose: true,
 }
 
+const USER_TYPE = {
+    BUYER: 0,
+    SELLER: 1
+}
 
 const networkURL = "http://localhost:7545"
 const provider = new Web3(new Web3.providers.HttpProvider(networkURL))
@@ -67,8 +193,16 @@ const contracts = {
         contractName: "RFQs",
         contractAddress: "",
         txHash: ""
+    },
+    bids: {
+        contractName: "Bids",
+        contractAddress: "",
+        txHash: ""
     }
 }
+
+
+var noRfqsAdded = 0
 
 
 init()
@@ -76,11 +210,14 @@ init()
 
 
 async function init() {
-    console.log("SETTING AUTHORITY ACCOUNT")
+
+    //check network connection
+
+    //set authority
+    console.log("\nSETTING AUTHORITY ACCOUNT")
     logs.authorityAccount && console.log("========================")
     await setAuthorityAccount()
-    //deploy, connect, account, register (user, products), verify
-    //===============================================================
+    
     //deploy users
     console.log("\nDEPLOYING CONTRACT: USERS, PRODUCTS")
     logs.contractDeployment && console.log("========================================")
@@ -100,17 +237,29 @@ async function init() {
     await deployContract(contracts.rfqs, [contracts.users.contractAddress, contracts.products.contractAddress])
     
     //add rfqs
-    console.log(`\nADDING RFQS: ${noRfqsPerBuyer.min} to ${noRfqsPerBuyer.max} RFQS PER BUYER, (${noProductsPerRfq.min} to ${noProductsPerRfq.max} PRODUCTS, AND, ${noKpisPerRfq.min} to ${noKpisPerRfq.max} KPIS, PER RFQ) `)
+    console.log(`\nADDING RFQS: ${noRfqsPerBuyer.min} to ${noRfqsPerBuyer.max} RFQS PER BUYER (${noProductsPerRfq.min} to ${noProductsPerRfq.max} PRODUCTS, AND, ${noKpisPerRfq.min} to ${noKpisPerRfq.max} KPIS, PER RFQ) `)
     logs.addingRfqs && console.log("=====================================================================================")
     await addRfqs()
 
+    //deploy rfqs
+    console.log("\nDEPLOYING CONTRACT: BIDS")
+    logs.contractDeployment && console.log("==============================")
+    await deployContract(contracts.bids, [contracts.users.contractAddress, contracts.products.contractAddress, contracts.rfqs.contractAddress])
+
     //add bids
+    console.log(`\nADDING BIDS FOR ${noRfqsAdded} RFQs `)
+    logs.addingBids && console.log("=====================================================================")
+    await addBids()
+
+    //review and score
 
     //start auction
 
     //declare winner
 
     //rate
+
+    //calculate consumption and other stats
 
     //auto-pilot
     
@@ -154,7 +303,8 @@ async function registerUsers() {
     }
 
     //create an {} for each product with struct data members + assign data to it & push to the global products array
-    for(let i = 1; i < productsCSV.length; i++) {
+    //the -1 in the stop condition is to prevent reading the last row because sometimes it's being considered a product even though no data is in it
+    for(let i = 1; i < productsCSV.length-1; i++) {
         let productCSV = productsCSV[i]
         let product = {}
         product["barcode"] = productCSV[0]
@@ -213,6 +363,7 @@ async function registerUsers() {
             //console.log(products.length)
             await registerUser(user.userType, user.name, user.contactDetails, user.productBarcodes, products) //userType, name, contactDetails, productBarcodes, product
             user.registered = true
+            user["products"] = products
             noRegisteredSellers++
             logs.userRegistration && console.log(`${user.name} (${user.userAddress})`)
             //console.log(result)
@@ -250,12 +401,13 @@ async function registerUsers() {
 }
 
 async function addRfqs() {
-    let kpis = await getKpis() //instantiated here to avoid instantiation each time
+    await initKpis()
+    kpis = await getKpis() //This reutrns a 2-dimentional array; instantiated here to avoid instantiation each time
+    kpiGroups = await getKpiGroups()
     //add rfqs with sellers to ensure that the guard is working; try adding rfqs with non-verified users, or non users at all
 
     //add rfqs with buyers
     //pick a random buyer, add a number of rfqs with him, then pick another buyer, until all buyers are passed over
-    let noRfqsAdded = 0
     for(let i = 0; i < usersData.length; i++) {
         let user = usersData[i]
         //if the user is a buyer and verified, then we add rfqs for him
@@ -285,7 +437,32 @@ async function addRfqs() {
                 
                 //add the rfq's products
                 let addedRfqProducts = 0
+                let noSuppliersProcessed = 0
                 let noRfqProductsToBeAdded = randomIntFromInterval(noProductsPerRfq.min, noProductsPerRfq.max)
+                for(let j = i; j < usersData.length; j++) {
+                    let user= usersData[j]
+                    if(user.verified && user.registered && user.userType == USER_TYPE.SELLER) {
+                        let products = user.products
+                        for(let k = 0; k < products.length; k++) {
+                            let product = products[k]
+                            let quantity = randomIntFromInterval(200, 2500)
+                            let idealLeadTime = randomIntFromInterval(7, 30)
+                            let idealShippingTime = randomIntFromInterval(1, 15)
+                            let country = countries[ randomIntFromInterval(0, 194) ]
+                            await addRfqProduct(parseInt(rfqFromContract.rfqNo), product.barcode, quantity, country, idealLeadTime, idealShippingTime)
+                            addedRfqProducts++
+                        }
+                        noSuppliersProcessed++
+                    }
+                    //the >= guarantees that at lest the products of one supplier are added
+                    if(noSuppliersProcessed == noBidsPerRFQ) {
+                        break
+                    }
+                }
+                /*
+                //add the rfq's products (more suitable for multi-supplier mode)
+                //let addedRfqProducts = 0
+                //let noRfqProductsToBeAdded = randomIntFromInterval(noProductsPerRfq.min, noProductsPerRfq.max)
                 for(let j = 0; j < productsData.length; j++) {
                     let product = productsData[j]
                     if(product.suppliers.length > 0) {
@@ -301,6 +478,7 @@ async function addRfqs() {
                         break
                     }
                 }
+                */
                 logs.addingRfqProducts && console.log(`Successfully added ${addedRfqProducts} out of ${noRfqProductsToBeAdded} products for RfqNo #${rfqFromContract.rfqNo}, user ${ getCurrentUser() } `)
                 
                 //add the rfq's KPIs
@@ -319,24 +497,34 @@ async function addRfqs() {
                     }
                 }
                 for(let j = 0; j < kpis.length; j++) {
-                    let kpi = kpis[j]
-                        //uint rfqNo, string memory kpi, uint weight, SCORE_RULE scoreRule, string memory comments
+                    let kpiGroupId = j
+                    let kpiGroup = kpiGroups[kpiGroupId]
+                    for(let k = 0; k < kpis[j].length; k++) {
+                        let kpiId = k
+                        let kpi = kpis[kpiGroupId][kpiId]
 
+                    //let kpiGroupWeight = weight.getGroupWeight()
                     let kpiWeight = weight.getWeight()
                     if(!weight.isValid()) {
-                        logs.addingRfqKpis && console.log(`Adding KPIs stopped at "${kpi}" because its weight is ${kpiWeight}, which will make totalWeight ${weight.totalWeight}`)
+                        logs.addingRfqKpis && console.log(`Adding KPIs stopped at "${kpiGroupId}. ${kpiGroup}/${kpiId}. ${kpi}" because its weight is ${kpiWeight}, which will make totalWeight ${weight.totalWeight}`)
                         break
                     }
 
                     let scoreRule = getScoreRule(kpi)
                     let comments = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
                     
-                    await addRfqKpi(parseInt(rfqFromContract.rfqNo), kpi, kpiWeight, scoreRule, comments)
+                    await addRfqKpi(parseInt(rfqFromContract.rfqNo), kpiGroupId, kpiId, kpiWeight, scoreRule, comments)
                     addedRfqKpis++
                     
                     if(addedRfqKpis == totalRfqKpisToAdd) {
                         break
                     }
+                        
+                    }
+                    //let kpi = kpis[j]
+                        //uint rfqNo, string memory kpi, uint weight, SCORE_RULE scoreRule, string memory comments
+
+
                 }
                 logs.addingRfqKpis && console.log(`Successfully added ${addedRfqKpis} out of ${totalRfqKpisToAdd} KPIs for RfqNo #${rfqFromContract.rfqNo}, user ${ getCurrentUser() } `)
                 
@@ -349,10 +537,139 @@ async function addRfqs() {
     }    
     //let rfqs = await getRfqs([], true)
     //let rfq = rfqs[0]
-    //console.log("rfqs", rfq)
+    //console.log("rfqs", rfqs[0])
     logs.addingRfqs && console.log(`Successfully added ${noRfqsAdded} RFQs`)
 
     //add rfq products
+}
+
+async function addBids() {
+    //get rfqs
+    let rfqs = await getRfqs()
+    //for each rfq, find suppliers that offer "all" products of th rqf, and submit a bid for them (bid+matrix, products, bid files)
+    let noBidsAdded = 0
+    for(let i = 0; i < rfqs.length; i++) {
+        let rfq = rfqs[i]
+        let rfqKpiIds = rfq.rfqKpiIds
+        let rfqProductIds = rfq.rfqProductIds
+        logs.addingBids && console.log(`\nAdding bids for RFQ #${rfq.rfqNo}\n---------------------------------------`)
+
+        let noAddedBidsForRfq = 0
+        for(let j = 0; j < usersData.length; j++) {
+            let user = usersData[j]
+            if(user.verified && user.registered && user.userType == USER_TYPE.SELLER) {
+                if(canBid(user, rfq)) {
+
+                    setAsCurrentUser(user.userAddress)
+
+                    logs.addingBids && console.log(`\nAdding Bid #${noAddedBidsForRfq+1} (by seller ${user.name})`)
+
+                    //adding the bid object
+                    let externalId = getRandomString()
+
+                    let kpiValues = []
+                    for(let k = 0; k < rfqKpiIds.length; k++) {
+                        let rfqKpi = await getRfqKpi(rfqKpiIds[k])
+                        let value = getKpiValue()
+                        kpiValues.push(value)
+                    }
+                    //console.log("kpiValues", kpiValues)
+        
+                    await addBid(rfq.rfqNo, externalId, kpiValues)
+                    let bid = await getBidByExternalId(externalId)
+        
+                    //adding the bid products (# bid products = # rfq products)
+                    for(let k = 0; k < rfqProductIds.length; k++) {
+                        let rfqProduct = await getRfqProduct(rfqProductIds[k])
+                        
+                        let bidId = bid.bidId
+                        let rfqProductId = rfqProduct.rfqProductId
+                        let pricePerUnit = randomIntFromInterval(1, 100)
+                        let leadTime = randomIntFromInterval( getLeadTime(rfqProduct.idealLeadTime, "min"), getLeadTime(rfqProduct.idealLeadTime, "max") )
+                        let shippingTime = randomIntFromInterval( getLeadTime(rfqProduct.idealLeadTime, "min"), getLeadTime(rfqProduct.idealLeadTime, "max") )
+                        let inventory = getInventory(rfqProduct.quantity)
+                        let customizations = randomIntFromInterval(1, 10)
+                        let minQuantity = getMinQuantity(rfqProduct.quantity)
+
+                        await addBidProduct(bidId, rfqProductId, pricePerUnit, leadTime, shippingTime, inventory, customizations, minQuantity)
+                        
+                    }
+                    logs.addingBidsVerbose && console.log(`Successfully added ${rfqProductIds.length} bid products`)
+
+                    //adding the bid files
+                    let noBidFilesToAdd = randomIntFromInterval(noFilesPerBid.min, noFilesPerBid.max)
+                    for(let k = 0; k < noBidFilesToAdd; k++) {
+                        let fileURI = `www.ipfs.io/${ getRandomString() }`
+                        let fileType = randomIntFromInterval(0, 5) //six types of files
+                        await addBidFile(bid.bidId, fileType, fileURI)
+
+                    }
+                    logs.addingBidsVerbose && console.log(`Successfully added ${noBidFilesToAdd} bid files`)
+
+        
+                    noBidsAdded++
+
+                }
+                noAddedBidsForRfq++
+
+            }
+            
+            if(noAddedBidsForRfq == noBidsPerRFQ) {
+                break
+            }
+        }
+
+    }
+    let bids = await getBids([], true)
+    //let offers = await getOffers()
+    //console.log(bids[0])
+    //console.log("offers", offers)
+    //let rfqsFromC = await getRfqs([], true)
+    //let rfq = rfqs[0]
+    //console.log("rfqsFromC", rfqsFromC)
+    logs.addingBids && console.log(`\nSuccessfully added ${noBidsAdded} Bids`)
+
+}
+
+function getLeadTime(idealLeadTime, mode) {
+    if(mode == "min") {
+        return Number(idealLeadTime - idealLeadTime/BigInt(10))
+    }
+    if(mode == "max") {
+        return Number(idealLeadTime + idealLeadTime/BigInt(10))
+    }
+}
+
+function getInventory(quantity) {
+    return quantity * BigInt(randomIntFromInterval(1, 10))
+}
+
+function getMinQuantity(quantity) {
+    return quantity - quantity/BigInt(10)
+
+}
+
+function convertToWei(number) {
+    
+    let bigNumber = provider.utils.toWei(number.toString(), "ether")
+    return bigNumber
+}
+
+//checks whether the supplier can bid for the rfq (by comparing whether he sells all of the rfq's products)
+function canBid(user, rfq) {
+    return true
+}
+
+function getKpiValue(kpiGrouIpd, kpiId) {
+    return randomIntFromInterval(5, 50)
+}
+
+async function initKpis() {
+    for( let [group, kpis] of KPIs ) {
+        //console.log(group)
+        //console.log(kpis)
+        await initKpiGroup(group, kpis)
+    }
 }
 
 async function getRfqByExternalId(externalId) {
@@ -360,6 +677,16 @@ async function getRfqByExternalId(externalId) {
     for(let i = 0; i < rfqs.length; i++) {
         if(rfqs[i].externalId === externalId) {
             return rfqs[i]
+        }
+    }
+    return false
+}
+
+async function getBidByExternalId(externalId) {
+    let bids = await getBids()
+    for(let i = 0; i < bids.length; i++) {
+        if(bids[i].externalId === externalId) {
+            return bids[i]
         }
     }
     return false
@@ -645,15 +972,25 @@ async function addRfqProduct(rfqNo, barcode, quantity, shipTo, idealLeadTime, id
 
     //rfqNo, rfqProductId, barcode, quantity, shipTo, idealLeadTime, idealShippingTime
     //[rfqProduct.rfqNo, rfqProduct.rfqProductId, rfqProduct.barcode, rfqProduct.quantity, rfqProduct.shipTo, rfqProduct.idealLeadTime, rfqProduct.idealShippingTime]
-    result = await contracts.rfqs.contract.methods.addRFQProduct(rfqNo, barcode, quantity, shipTo, idealLeadTime, idealShippingTime).send({
+
+    let weiQuantity = provider.utils.toWei(quantity.toString(), "ether")
+    let weiIdealLeadTime = provider.utils.toWei(idealLeadTime.toString(), "ether")
+    let weiIdealShippingTime = provider.utils.toWei(idealShippingTime.toString(), "ether")
+
+
+    result = await contracts.rfqs.contract.methods.addRFQProduct(rfqNo, barcode, weiQuantity, shipTo, weiIdealLeadTime, weiIdealShippingTime).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
 }
 
-async function addRfqKpi(rfqNo, kpi, weight, scoreRule, comments) {
-    result = await contracts.rfqs.contract.methods.addRfqKpi(rfqNo, kpi, weight, scoreRule, comments).send({
+async function addRfqKpi(rfqNo, kpiGroupId, kpiId, kpiWeight, scoreRule, comments) {
+
+    
+    let weiKpiWeight = provider.utils.toWei(kpiWeight.toString(), "ether")
+
+    result = await contracts.rfqs.contract.methods.addRfqKpi(rfqNo, kpiGroupId, kpiId, weiKpiWeight, scoreRule, comments).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
@@ -702,6 +1039,13 @@ async function getRfq(rfqNo, complete = false) {
 
         for(let i = 0; i < rfq.rfqKpiIds.length; i++) {
             let rfqKpi = await getRfqKpi( rfq.rfqKpiIds[i] )
+
+            let kpiId = rfqKpi.kpiId
+            let kpiGroupId = rfqKpi.kpiGroupId
+
+            rfqKpi["kpi"] = kpis[kpiGroupId][kpiId]
+            rfqKpi["kpiGroup"] = kpiGroups[kpiGroupId]
+
             rfqKpis.push(rfqKpi)
         }
 
@@ -724,11 +1068,180 @@ async function getRfqKpi(rfqKpiId) {
     return rfqKpi
 }
 
+async function initKpiGroup(group, kpis) {
+    
+    result = await contracts.rfqs.contract.methods.initKpiGroup(group, kpis).send({
+        from: getCurrentUser(),
+        gas: 1000000,
+        gasPrice: 10000000000,
+    })
+}
+
 async function getKpis() {
     let kpis = []
     kpis = await contracts.rfqs.contract.methods.getKpis().call()
     return kpis
 }
+
+async function getKpiGroups() {
+    let kpiGroups = []
+    kpiGroups = await contracts.rfqs.contract.methods.getKpiGroups().call()
+    return kpiGroups
+}
+
+async function addBid(rfqNo, externalId, kpiValues) {
+
+    for(let i = 0; i < kpiValues.length; i++) {
+        kpiValues[i] = provider.utils.toWei(kpiValues[i].toString(), "ether")
+    }
+
+    result = await contracts.bids.contract.methods.addBid(rfqNo, externalId, kpiValues).send({
+        from: getCurrentUser(),
+        gas: 1000000,
+        gasPrice: 10000000000,
+    })
+
+}
+
+async function getBidIds() {
+    let bidIds = []
+    bidIds = await contracts.bids.contract.methods.getBidIds().call()
+    return bidIds
+}
+
+async function getBids(bidIds = [], complete = false) {
+    if(bidIds.length == 0) {
+        bidIds = await getBidIds()
+        if(bidIds.length == 0) {
+            return []
+        }
+    }
+
+    let bids = []
+    for(let i = 0; i < bidIds.length; i++) {
+
+        let bid = await getBid( bidIds[i], complete )        
+        bids.push ( bid )
+        
+    }
+
+    return bids
+}
+
+async function getBid(bidId, complete = false) {
+    
+    let bid = await contracts.bids.contract.methods.getBid( bidId ).call()
+
+    if(complete) {
+
+        let bidProducts = []
+        let bidFiles = []
+        let scoresMatrixCompete = []
+
+        for(let i = 0; i < bid.bidProductIds.length; i++) {
+            let bidProduct = await getBidProduct( bid.bidProductIds[i] )
+            bidProducts.push(bidProduct)
+        }
+
+        for(let i = 0; i < bid.bidFileIds.length; i++) {
+            let bidFile = await getBidFile( bid.bidFileIds[i] )
+
+
+            bidFiles.push(bidFile)
+        }
+
+        //scoresMatrixComplete
+
+        bid["bidProducts"] = bidProducts
+        bid["bidFiles"] = bidFiles
+
+    }
+
+    return bid
+
+}
+
+async function getOfferIds() {
+    let offerIds = []
+    offerIds = await contracts.bids.contract.methods.getOfferIds().call()
+    return offerIds
+}
+
+async function getOffers(offerIds = [], complete = false) {
+    if(offerIds.length == 0) {
+        offerIds = await getOfferIds()
+        if(offerIds.length == 0) {
+            return []
+        }
+    }
+
+    let offers = []
+    for(let i = 0; i < offerIds.length; i++) {
+
+        let offer = await getOffer( offerIds[i], complete )        
+        offers.push ( offer )
+        
+    }
+
+    return offers
+}
+
+async function getOffer(offerId, complete = false) {
+    
+    let offer = await contracts.bids.contract.methods.getOffer( offerId ).call()
+    return offer
+
+}
+
+async function addBidProduct(bidId, rfqProductId, pricePerUnit, leadTime, shippingTime, inventory, customizations, minQuantity) {
+    //uint bidId, uint rfqProductId, uint pricePerUnit, uint leadTime, uint shippingTime, uint inventory, uint customizations, uint minQuantity
+
+    let weiPricePerUnit = provider.utils.toWei(pricePerUnit.toString(), "ether")
+    let weiLeadTime = provider.utils.toWei(leadTime.toString(), "ether")
+    let weiShippingTime = provider.utils.toWei(shippingTime.toString(), "ether")
+    let weiInventory = provider.utils.toWei(inventory.toString(), "ether")
+    let weiCustomizations = provider.utils.toWei(customizations.toString(), "ether")
+    let weiMinQuantity = provider.utils.toWei(minQuantity.toString(), "ether")
+
+    result = await contracts.bids.contract.methods.addBidProduct(
+        bidId, 
+        rfqProductId, 
+        weiPricePerUnit, 
+        weiLeadTime, 
+        weiShippingTime, 
+        weiInventory, 
+        weiCustomizations, 
+        weiMinQuantity).send({
+        from: getCurrentUser(),
+        gas: 1000000,
+        gasPrice: 10000000000,
+    })
+
+}
+
+async function getBidProduct(bidProductId) {
+    let bidProduct = await contracts.bids.contract.methods.getBidProduct( bidProductId ).call()
+    return bidProduct
+}
+
+async function addBidFile(bidId, fileType, fileURI) {
+    result = await contracts.bids.contract.methods.addBidFile(bidId, fileType, fileURI).send({
+        from: getCurrentUser(),
+        gas: 1000000,
+        gasPrice: 10000000000,
+    })
+
+}
+
+async function getBidFile(bidFileId) {
+    let bidFile = await contracts.bids.contract.methods.getBidFile( bidFileId ).call()
+    return bidFile
+}
+
+
+
+
+
 
 function getRandomString() {
     let randomString = (Math.random() + 1).toString(36).substring(7) + randomIntFromInterval(10000, 10000000)

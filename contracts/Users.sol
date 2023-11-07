@@ -19,8 +19,6 @@ contract Users {
         authority = msg.sender;
     }
 
-    
-
     function getAuthority() public view returns(address) {
         return authority;
     }
@@ -36,7 +34,7 @@ contract Users {
 
     function register(USER_TYPE userType, string memory name, string memory contactDetails, string[] memory productBarcodes) public returns (bool) {
 		
-		users[msg.sender] = User(userType, name, msg.sender, contactDetails, productBarcodes, false);
+		users[msg.sender] = User(userType, name, msg.sender, contactDetails, productBarcodes, false, 0, 0);
 		if(!userExists(msg.sender)) {
 			userAddresses.push(msg.sender);
 		}

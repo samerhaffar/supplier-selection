@@ -6,7 +6,7 @@ const path = require("path")
 const fs = require("fs")
 
 //const fileName = "SmartContract.sol"
-const contractNames = [ "Types", "Users", "Products", "RFQs"]
+const contractNames = [ "Types", "Users", "Products", "RFQs", "Bids"]
 exports.contractNames = contractNames
 
 const compileTo = "./compiled"//"../project-6/src/artifacts"

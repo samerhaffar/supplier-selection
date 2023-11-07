@@ -16,39 +16,42 @@ contract RFQs {
     Products products;
 
 	mapping(uint => RFQ) private rfqs;
-	uint[] private rfqNos;
-
 	mapping(uint => RFQProduct) private rfqProducts;
 	mapping(uint => RFQKPI) private rfqKpis;
 
+	uint[] private rfqNos;
 	uint[] private rfqProductsIds;
 	uint[] private rfqKpisIds;
 
-	string[] private kpiNames;
+	string[] private kpiGroups;
+	string[][] private kpiNames;
 
     constructor(Users _users, Products _products) {
         users = _users;
         products = _products;
         authority = msg.sender;
-		initKpis();
     }
     function getAuthority() public view returns(address) {
         return authority;
     }
-	function initKpis() private returns(bool) {
-		kpiNames.push("KPI1");
-		kpiNames.push("KPI2");
-		kpiNames.push("KPI3");
-		kpiNames.push("KPI5");
-		kpiNames.push("KPI6");
-		kpiNames.push("KPI7");
-		kpiNames.push("KPI8");
-		kpiNames.push("KPI9");
-		kpiNames.push("KPI10");
+
+	function initKpiGroup(string memory group, string[] memory kpis) public returns(bool) {
+
+		//uint groupId = kpiGroups.length;
+		kpiGroups.push(group);
+		kpiNames.push(kpis);
+		
+		/*for(uint i = 0; i < kpis.length; i++) {
+			kpiNames[groupId].push(kpis[i]);			
+		}	*/	
+	
 		return true;
 	}
-	function getKpis() public view returns (string[] memory) {
+	function getKpis() public view returns (string[][] memory) {
 		return kpiNames;
+	}
+	function getKpiGroups() public view returns(string[] memory) {
+		return kpiGroups;
 	}
 	function addRFQ(string memory docURI, string memory externalId) public 
 	//userIsVerified userIsBuyer 
@@ -58,14 +61,20 @@ contract RFQs {
 		RFQ_STATUS status = RFQ_STATUS.NEW;
 		uint[] memory rfqProductIds;
 		uint[] memory rfqKpiIds;
+		uint[] memory bidIds;
 		//string[] memory productBarcodes;
 
-		RFQ memory rfq = RFQ(RFQNo, externalId, rfqProductIds, rfqKpiIds, msg.sender, status, docURI);
+		RFQ memory rfq = RFQ(RFQNo, externalId, rfqProductIds, rfqKpiIds, msg.sender, status, docURI, bidIds);
 		rfqs[RFQNo] = rfq;
 		rfqNos.push(RFQNo);
 
 		return RFQNo;
 	}
+
+	function addBidId(uint bidId, uint rfqNo) public {
+		rfqs[rfqNo].bidIds.push(bidId);
+	}
+
 	function addRFQProduct(uint rfqNo, string memory barcode, uint quantity, string memory shipTo, uint idealLeadTime, uint idealShippingTime) public 
 		//userIsVerified 
 		//userIsBuyer 
@@ -102,7 +111,7 @@ contract RFQs {
 
 		return true;
 	}
-	function addRfqKpi(uint rfqNo, string memory kpi, uint weight, SCORE_RULE scoreRule, string memory comments) public 
+	function addRfqKpi(uint rfqNo, uint kpiGroupId, uint kpiId, uint weight, SCORE_RULE scoreRule, string memory comments) public 
 		//userIsVerified 
 		//userIsBuyer 
 		//validRFQNo(rfqNo) 
@@ -116,7 +125,7 @@ contract RFQs {
 		uint rfqKpiId = rfqKpisIds.length > 0 ? rfqKpisIds.length + 1 : 1;
 
 		//Creting the RFQKPI object.
-		RFQKPI memory rfqKpi = RFQKPI(rfqNo, rfqKpiId, kpi, weight, scoreRule, comments);
+		RFQKPI memory rfqKpi = RFQKPI(rfqNo, rfqKpiId, kpiGroupId, kpiId, weight, scoreRule, comments);
 
 		//adding RFQKPI object to master list and its ids tracker
 		rfqKpis[rfqKpiId] = rfqKpi;
@@ -136,54 +145,20 @@ contract RFQs {
 		return rfqKpis[rfqKpiId];
 	}
 
-	function checkKPIWeights(RFQ memory rfq) private view returns(bool) {
-
-		require(rfq.rfqKpiIds.length > 0, "Cannot call checkKPIWeights on RFQ with no KPIs assigned");
-
-		uint totalWeight = 0;
-		for(uint i = 0; i < rfq.rfqKpiIds.length; i++) {
-			uint rfqKpiId = rfq.rfqKpiIds[i];
-			RFQKPI memory rfqKpi = rfqKpis[rfqKpiId];
-			totalWeight += rfqKpi.weight;
-		}
-
-		if(totalWeight/1000000000000000 != 1000) {
-			return false;
-		}
-		return true;
+	function changeRfqStatus(uint rfqNo, RFQ_STATUS rfqStatus) public {
+		rfqs[rfqNo].status = rfqStatus;
 	}
+
+
 	function getRFQNos() public view 
 		//userIsVerified 
 		returns(uint[] memory) {
 			return rfqNos;
 	}
-	function getRFQ(uint rfqNo) public view  validRFQNo(rfqNo) /*canRetrieveRFQ(RFQNo) //userIsVerified*/returns(RFQ memory) {
+	function getRFQ(uint rfqNo) public view  /*validRFQNo(rfqNo)*/ /*canRetrieveRFQ(RFQNo) //userIsVerified*/returns(RFQ memory) {
 			return rfqs[rfqNo];
 	}
    function compareStrings(string memory a, string memory b) public pure returns (bool) {
         return (keccak256(abi.encodePacked((a))) == keccak256(abi.encodePacked((b))));
     }
-	modifier userIsVerified {
-        if(msg.sender == authority) {
-            _;
-        }
-		require(users.isVerified(msg.sender), "The user is not registered or not verified yet.");
-        _;
-	}
-	modifier userIsBuyer {
-        if(msg.sender == authority) {
-            _;
-        }
-		require(users.isBuyer(msg.sender), "User is not a buyer.");
-        _;
-	}	
-	modifier validRFQNo(uint rfqNo) {
-		require(rfqNo <= rfqNos.length, "RFQNo not found");
-		require(rfqNo > 0, "RFQNo must be more than 1");
-		_;
-	}
-	modifier validProductBarcode(string memory barcode) {
-		require(products.barcodeExists(barcode), "Invalid barcode or barcode not found");
-		_;
-	}
 }

@@ -33,5 +33,27 @@ contract Utils {
         // Concat the 2 strings passed
         return string(abi.encodePacked(_str1, " ", _str2));
 	}
+
+
+	/**
+	 * 
+	 * 	function checkKPIWeights(RFQ memory rfq) private view returns(bool) {
+
+		require(rfq.rfqKpiIds.length > 0, "Cannot call checkKPIWeights on RFQ with no KPIs assigned");
+
+		uint totalWeight = 0;
+		for(uint i = 0; i < rfq.rfqKpiIds.length; i++) {
+			uint rfqKpiId = rfq.rfqKpiIds[i];
+			RFQKPI memory rfqKpi = rfqKpis[rfqKpiId];
+			totalWeight += rfqKpi.weight;
+		}
+
+		if(totalWeight/1000000000000000 != 1000) {
+			return false;
+		}
+		return true;
+	}
+	 */
+
     
 }
