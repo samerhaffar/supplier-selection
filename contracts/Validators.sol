@@ -9,7 +9,6 @@ import { Products } from "./Products.sol";
 import { Users } from "./Users.sol";
 import { RFQs } from "./RFQs.sol";
 import { Bids } from "./Bids.sol";
-import { Auctions } from "./Auctions.sol";
 
 contract Validators {
 

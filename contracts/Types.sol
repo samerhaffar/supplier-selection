@@ -7,10 +7,53 @@
 pragma solidity >= 0.7.0 < 0.9.0;
 
 enum USER_TYPE { BUYER, SELLER }
-enum RFQ_STATUS {NEW, ACCEPTING_BIDS, REVIEWING, AUCTION_REVIEWING, AUCTION_BIDDING, AWARDED, CANCELED}
 enum SCORE_RULE {ASCENDING, DESCENDING}  //Descending means largest value gets highest score; Ascending means lowest value gets highest score
 enum BID_FILE_TYPE { TECHNICAL_PROPOSAL, FINANCIAL_PROPOSAL, SIX_SIGMA_CERTIFICATE, QUALITY_CERTIFICATE, SAFETY_CERTIFICATE, ENVIRONMENTAL_AUDIT }
-enum BID_STATUS { NEW, SUBMITTED, AUCTION_SUBMITTED, AUCTION_REVIEWED, AWARDED, LOST }
+enum ACTION {
+    ADD_RFQ,
+    OPEN_BIDDING,
+    SUBMIT_BID,
+    CLOSE_BIDDING,
+    OPEN_AUCTION,
+    SUBMIT_OFFER,
+    CLOSE_AUCTION,
+    DECLARE_WINNER,
+    CANCEL_RFQ,
+    WITHDRAW_BID,
+    RATE_SELLER,
+    RATE_BUYER,
+    RATE_AFTER_SALE,
+    COMPLETE_RFQ
+}
+enum RFQ_STATUS {
+    NEW, 
+    BIDDING_OPEN,
+    REVIEWING_BIDS, 
+    AUCTION_BIDDING_OPEN, 
+    AUCTION_REVIEWING_BIDS,
+    WINNER_DECLARED,
+    CANCELED,
+    WIINNER_WITHDRAWN,
+    SELLER_RATED,
+    BUYER_RATED,
+    AFTER_SALE_RATED,
+    COMPLETED
+}
+enum BID_STATUS { 
+    NEW,
+    SUBMITTED,
+    AUCTION_WON,
+    AUCTION_LOST,
+    AUCTION_COUNTEROFFER,
+    AWARDED,
+    LOST,
+    WITHDRAWN,
+    SELLER_RATED,
+    BUYER_RATED,
+    AFTER_SALE_RATED,
+    RFQ_COMPLETED,
+    RFQ_CANCELED
+}
 
 struct User {
     USER_TYPE userType;
@@ -31,16 +74,18 @@ struct Product {
 }
 
 struct RFQ {
-		uint rfqNo;
-        string externalId;
-		uint[] rfqProductIds; //barcode => RFQProduct object
-		//string[] productBarcodes; //although reachable via RFQProduct objects; this makes it more efficient and cheaper for sellsProduct
-		uint[] rfqKpiIds; //KPI => RFQKPI object
-		address buyer;
-		RFQ_STATUS status;
-		string docURI;
-        uint[] bidIds;
-	}
+    uint rfqNo;
+    string externalId;
+    uint[] rfqProductIds; //barcode => RFQProduct object
+    //string[] productBarcodes; //although reachable via RFQProduct objects; this makes it more efficient and cheaper for sellsProduct
+    uint[] rfqKpiIds; //KPI => RFQKPI object
+    address buyer;
+    RFQ_STATUS status;
+    uint round;
+    string docURI;
+    uint[] bidIds;
+    uint winningBidId;
+}
 
 struct RFQProduct {
     uint rfqNo;
@@ -60,6 +105,8 @@ struct RFQKPI {
     uint kpiGroupId;
     uint kpiId;
     uint weight;
+    uint[] offerValues; //inserted in the order of the bids, so regardless of the actual bidId, we insert/fetch at bidIds.length
+    uint[] offerScores; //inserted in the order of the bids, so regardless of the actual bidId, we insert/fetch at bidIds.length
     SCORE_RULE scoreRule;
     string comments;
     //perhaps we can add "status" which shows us whether active or disabled
@@ -68,7 +115,7 @@ struct RFQKPI {
 struct Bid {
     uint bidId;
     string externalId;
-    uint rfqId;
+    uint rfqNo;
     uint score; //the total score for the bid; calculated with the formula: BidScore = Sum(GroupScore*GroupWeight); GroupScore = Sum(KPIScore*KPIWeight)
     BID_STATUS status;
     uint acceptedOfferId;
@@ -76,8 +123,9 @@ struct Bid {
     uint[] bidProductIds;
     uint[] bidFileIds;
     uint[] offerIds; 
-    uint supplierRating; //set by buyer
-    string supplierRatingComments; //set by buyer
+    uint latestOfferId;
+    uint sellerRating; //set by buyer
+    string sellerRatingComments; //set by buyer
     uint buyerRating; 
     string buyerRatingComments; //set by buyer
     uint afterSaleRating; //set by buyer
@@ -110,6 +158,8 @@ struct BidFile {
 struct Offer {
     uint bidId;
     uint offerId;
+    BID_STATUS status; //status for the offer, but using BID_STATUS
+    uint score;
     uint offerSerialNo;
     uint[] kpiValues;
     uint[] kpiScores;

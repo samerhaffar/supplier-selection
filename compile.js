@@ -6,7 +6,7 @@ const path = require("path")
 const fs = require("fs")
 
 //const fileName = "SmartContract.sol"
-const contractNames = [ "Types", "Users", "Products", "RFQs", "Bids"]
+const contractNames = [ "Utils", "Types", "Users", "Products", "RFQs", "Bids"]
 exports.contractNames = contractNames
 
 const compileTo = "./compiled"//"../project-6/src/artifacts"
@@ -50,6 +50,7 @@ function compile(contractName, compileTo, input) {
 
     // Compile the Solidity code using solc
     const compiledCode = JSON.parse(solc.compile(JSON.stringify(input)))
+    //console.log(compiledCode)
     // Write the Contract ABI to a new file
     const compiledCodePath = path.join(compileToPath, `${contractName}.json`)
     fs.writeFileSync(compiledCodePath, JSON.stringify(compiledCode, null, "\t"))

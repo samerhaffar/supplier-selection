@@ -7,8 +7,8 @@
 pragma solidity >= 0.7.0 < 0.9.0;
 import { Products } from "./Products.sol";
 import { Users } from "./Users.sol";
-//import { Utils } from "./Utils.sol";
 import { User, USER_TYPE, Product, RFQ_STATUS, SCORE_RULE, RFQ, RFQProduct, RFQKPI } from "./Types.sol";
+
 
 contract RFQs {
     address private authority;
@@ -35,17 +35,9 @@ contract RFQs {
         return authority;
     }
 
-	function initKpiGroup(string memory group, string[] memory kpis) public returns(bool) {
-
-		//uint groupId = kpiGroups.length;
+	function initKpiGroup(string memory group, string[] memory kpis) public {
 		kpiGroups.push(group);
 		kpiNames.push(kpis);
-		
-		/*for(uint i = 0; i < kpis.length; i++) {
-			kpiNames[groupId].push(kpis[i]);			
-		}	*/	
-	
-		return true;
 	}
 	function getKpis() public view returns (string[][] memory) {
 		return kpiNames;
@@ -64,7 +56,7 @@ contract RFQs {
 		uint[] memory bidIds;
 		//string[] memory productBarcodes;
 
-		RFQ memory rfq = RFQ(RFQNo, externalId, rfqProductIds, rfqKpiIds, msg.sender, status, docURI, bidIds);
+		RFQ memory rfq = RFQ(RFQNo, externalId, rfqProductIds, rfqKpiIds, msg.sender, status, 0, docURI, bidIds, 0);
 		rfqs[RFQNo] = rfq;
 		rfqNos.push(RFQNo);
 
@@ -75,12 +67,11 @@ contract RFQs {
 		rfqs[rfqNo].bidIds.push(bidId);
 	}
 
-	function addRFQProduct(uint rfqNo, string memory barcode, uint quantity, string memory shipTo, uint idealLeadTime, uint idealShippingTime) public 
+	function addRFQProduct(uint rfqNo, string memory barcode, uint quantity, string memory shipTo, uint idealLeadTime, uint idealShippingTime) public {	
 		//userIsVerified 
 		//userIsBuyer 
 		//validRFQNo(rfqProductArg.rfqNo) 
-		//validProductBarcode(rfqProductArg.barcode) 	
-		returns(bool) {
+		//validProductBarcode(rfqProductArg.barcode) 
 
 		//RFQ memory rfq = rfqs[rfqNo];
 		//require(rfq.buyer == msg.sender, "User not the creator of the RFQ");
@@ -99,8 +90,6 @@ contract RFQs {
 			idealLeadTime, 
 			idealShippingTime
 		);
-		
-
 		//adding RFQProduct object to master list and its ids tracker
 		rfqProducts[rfqProductId] = rfqProduct;
 		rfqProductsIds.push(rfqProductId);
@@ -108,8 +97,6 @@ contract RFQs {
 		//Linking RFQProduct object to the RFQ object
 		rfqs[rfqNo].rfqProductIds.push(rfqProductId);
 
-
-		return true;
 	}
 	function addRfqKpi(uint rfqNo, uint kpiGroupId, uint kpiId, uint weight, SCORE_RULE scoreRule, string memory comments) public 
 		//userIsVerified 
@@ -117,23 +104,22 @@ contract RFQs {
 		//validRFQNo(rfqNo) 
 		returns(bool) {
 
-
-		//require(rfq.buyer == msg.sender, "User not the creator of the RFQ");
-		//require(checkKPIWeights(rfq), "Sum of KPI weights should not be less, or more, than 1.000");
-		
-		//Generating an Id for the RFQKPI object. Always starts at 1.
 		uint rfqKpiId = rfqKpisIds.length > 0 ? rfqKpisIds.length + 1 : 1;
+		uint[] memory offerValues;
+		uint[] memory offerScores;
 
 		//Creting the RFQKPI object.
-		RFQKPI memory rfqKpi = RFQKPI(rfqNo, rfqKpiId, kpiGroupId, kpiId, weight, scoreRule, comments);
+		RFQKPI memory rfqKpi = RFQKPI(rfqNo, rfqKpiId, kpiGroupId, kpiId, weight, offerValues, offerScores, scoreRule, comments);
 
-		//adding RFQKPI object to master list and its ids tracker
 		rfqKpis[rfqKpiId] = rfqKpi;
 		rfqKpisIds.push(rfqKpiId);
-		//Linking RFQKPI object to the RFQ object
+		
 		rfqs[rfqNo].rfqKpiIds.push(rfqKpiId); 
 
 		return true;
+	}
+	function addOfferToKpi(uint rfqKpiId, uint value) public {
+		rfqKpis[rfqKpiId].offerValues.push(value);
 	}
 
 	function getRfqProduct(uint rfqProductId) public view returns (RFQProduct memory) {
@@ -144,12 +130,16 @@ contract RFQs {
 	function getRfqKpi(uint rfqKpiId) public view returns (RFQKPI memory) {
 		return rfqKpis[rfqKpiId];
 	}
-
-	function changeRfqStatus(uint rfqNo, RFQ_STATUS rfqStatus) public {
-		rfqs[rfqNo].status = rfqStatus;
+	function getBidIds(uint rfqNo) public view returns(uint[] memory) {
+		return rfqs[rfqNo].bidIds;
 	}
 
-
+	function updateRfqStatus(uint rfqNo, RFQ_STATUS rfqStatus) public {
+		rfqs[rfqNo].status = rfqStatus;
+	}
+	function increaseRound(uint rfqNo) public {
+		rfqs[rfqNo].round++;
+	}
 	function getRFQNos() public view 
 		//userIsVerified 
 		returns(uint[] memory) {
@@ -158,7 +148,7 @@ contract RFQs {
 	function getRFQ(uint rfqNo) public view  /*validRFQNo(rfqNo)*/ /*canRetrieveRFQ(RFQNo) //userIsVerified*/returns(RFQ memory) {
 			return rfqs[rfqNo];
 	}
-   function compareStrings(string memory a, string memory b) public pure returns (bool) {
-        return (keccak256(abi.encodePacked((a))) == keccak256(abi.encodePacked((b))));
-    }
+	function setWinningBidId(uint rfqNo, uint bidId) public {
+		rfqs[rfqNo].winningBidId = bidId;
+	}
 }
