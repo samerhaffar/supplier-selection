@@ -9,6 +9,7 @@ pragma solidity >= 0.7.0 < 0.9.0;
 enum USER_TYPE { BUYER, SELLER }
 enum SCORE_RULE {ASCENDING, DESCENDING}  //Descending means largest value gets highest score; Ascending means lowest value gets highest score
 enum BID_FILE_TYPE { TECHNICAL_PROPOSAL, FINANCIAL_PROPOSAL, SIX_SIGMA_CERTIFICATE, QUALITY_CERTIFICATE, SAFETY_CERTIFICATE, ENVIRONMENTAL_AUDIT }
+
 enum ACTION {
     ADD_RFQ,
     OPEN_BIDDING,
@@ -119,7 +120,7 @@ struct Bid {
     uint score; //the total score for the bid; calculated with the formula: BidScore = Sum(GroupScore*GroupWeight); GroupScore = Sum(KPIScore*KPIWeight)
     BID_STATUS status;
     uint acceptedOfferId;
-    address buyer;
+    address seller;
     uint[] bidProductIds;
     uint[] bidFileIds;
     uint[] offerIds; 
