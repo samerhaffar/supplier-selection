@@ -7,7 +7,7 @@ const fs = require("fs")
 
 const KPIs = new Map()
 KPIs.set(
-    "Product", 
+    "Economic", 
     [
         "Inventory/Quarter",
         "Total Price",
@@ -135,27 +135,29 @@ const usersData = []
 const productsData = []
 const noBuyers = 1
 const noSellers = 5
-const noProductsPerSeller = {min: 1, max: 1}
+const noProductsPerSeller = {min: 5, max: 5}
 const noVerifiedUsers = 17
 
-const noRfqsPerBuyer = { min: 2, max: 2 }
-const noProductsPerRfq =  { min: 1, max: 1 }
-const noKpisPerRfq =  { min: 6, max: 6 } //max cannot be more than kpis.length
+const noRfqsPerBuyer = { min: 1, max: 1 }
+const noProductsPerRfq =  { min: 5, max: 5 }
+const noKpisPerRfq =  { min: 12, max: 12 } //max cannot be more than kpis.length
 
-const noBidsPerRFQ = { min: 5, max: 5 }
+const noBidsPerRFQ = { min: 10, max: 10 }
 const noFilesPerBid = { min: 1, max: 1 }
 
+//specify number of rfqs you want to be procesesed according to each path; eg: if path1 = 2, then 2 of the rfqs that were added will be processed according to path1; 
+//total number of paths must equal total number of rfqs added
 const auctionPaths = {
     path1: 0, //PATH 1: RFQ TO WINNER TO COMPLETED
-    path2: 0, //PATH 2: RFQ TO MANUAL SCORES TO WINNER TO COMPLETED
+    path2: 1, //PATH 2: RFQ TO MANUAL SCORES TO WINNER TO COMPLETED
     path3: 0, //PATH 3: RFQ TO AUCTION TO WINNER TO COMPLETED
     path4: 0, //PATH 4: RFQ TO AUCTION TO AUCTION TO WINNER TO COMPLETED
     path5: 0, //PATH 5: RFQ TO AUCTION TO AUCTION TO MANUAL SCORES TO WINNER TO COMPLETED
     path6: 0, //PATH 6: RFQ TO WINNER TO WINNER WITHDRAWN TO COMPLETED
-    path7: 1  //PATH 7: RFQ TO WINNER TO TO CANCELED
+    path7: 0  //PATH 7: RFQ TO WINNER TO TO CANCELED
 }
 
-const txReceipts = []
+const txReceipts = new Map()
 
 const steps = {
     authorityAccount: true,
@@ -165,29 +167,36 @@ const steps = {
     addingRfqs: true,
     bidsContract: true,
     addingBids: true,
-    auctionsContract: false,
-    addingAuctions: true
+    addingAuctions: true,
+    calculateStats: false
     
 }
 
 const logs = {
-    authorityAccount: false,
-    contractDeployment: false,
-    userRegistration: false,
-    addingRfqs: false,
-    addingRfqProducts: false,
-    addingRfqKpis: false,
-    addingBids: false,
-    addingBidsVerbose: false,
+    authorityAccount: true,
+    contractDeployment: true,
+    userRegistration: true,
+    addingRfqs: true,
+    addingRfqProducts: true,
+    addingRfqKpis: true,
+    addingBids: true,
+    addingBidsVerbose: true,
     addingAuctions: true,
-    addingAuctionsVerbose_L1: true,
-    addingAuctionsVerbose_L2: true
+    auctionLogActions: true,
+    auctionLogUsers: true,
+    auctionLogStatuses: false,
+    auctionLogBids: true,
+    auctionLogOffers: false,
+    calculateStats: true
 }
 
 const USER_TYPE = {
     BUYER: 0,
     SELLER: 1
 }
+
+
+
 
 const networkURL = "http://localhost:7545"//"http://192.168.8.159:4792" // //
 const provider = new Web3(new Web3.providers.HttpProvider(networkURL))
@@ -224,16 +233,6 @@ const contracts = {
         contractName: "Bids",
         contractAddress: "",
         txHash: ""
-    },
-    auctionHelper: {
-        contractName: "AuctionHelper",
-        contractAddress: "",
-        txHash: ""
-    },
-    auctions: {
-        contractName: "Auctions",
-        contractAddress: "",
-        txHash: ""
     }
 }
 
@@ -255,6 +254,7 @@ const ACTIONS = {
     CANCEL_RFQ: 14,
     UPDATE_SCORES_MANUALLY: 15
 }
+
 
 
 const SCORE_RULE= {
@@ -312,7 +312,7 @@ async function init() {
     steps.userProductContracts && logs.contractDeployment && console.log("========================================")
     steps.userProductContracts && await deployContract(contracts.users)
     steps.userProductContracts && await deployContract(contracts.products)
-    
+
     //register users (user, products)
     steps.userRegistration && console.log(`\nREGISTERING USERS: ${noBuyers} BUYERS, ${noSellers} SELLERS (${noProductsPerSeller.min} to ${noProductsPerSeller.max} PRODUCTS PER SELLER)`)
     steps.userRegistration && logs.userRegistration && console.log("=========================================================================")
@@ -343,15 +343,10 @@ async function init() {
     steps.addingAuctions && logs.addingBids && console.log("=================================================")
     steps.addingAuctions && await addAuctions()
 
-    //review and score
-
-    //start auction
-
-    //declare winner
-
-    //rate
-
     //calculate consumption and other stats
+    steps.calculateStats && console.log(`\nCALCULATING STATS `)
+    steps.calculateStats && logs.calculateStats && console.log("=================================================")
+    steps.calculateStats && await calculateStats()
 
     //auto-pilot
     
@@ -375,8 +370,22 @@ async function setAsCurrentUser(userAddress) {
     return true
 }
 
-function getCurrentUser() {
+function getCurrentUser(name = false) {
+    if(name) {
+        let userName = getUserNameByAddress(mainUserAccounts.currentUser)
+        return userName
+    }
     return mainUserAccounts.currentUser
+}
+
+function getUserNameByAddress(address) {
+    for(let i = 0; i < usersData.length; i++) {
+        let userAddress = usersData[i].userAddress
+        if(userAddress == address) {
+            let name = usersData[i].name
+            return name
+        }
+    }
 }
 
 async function registerUsers() {
@@ -585,7 +594,7 @@ async function addRfqs() {
                 let weight = {
                     totalWeight: 1, //cannot start at 0 because 
                     getWeight: function() {
-                        let upperInterval = this.totalWeight + Math.round( (1000 / kpis.length) ) //dividing weight evenly across all kpis so we get as many of the criteria as possible added and try to avoid the isValid condition
+                        let upperInterval = this.totalWeight + Math.round( (1000 / noKpisPerRfq.max) ) //dividing weight evenly across all kpis so we get as many of the criteria as possible added and try to avoid the isValid condition
                         let weight = randomIntFromInterval(this.totalWeight, upperInterval)
                         this.totalWeight += weight
                         return weight
@@ -738,14 +747,20 @@ async function addAuctions() {
         let rfqNo = rfq.rfqNo
         let bidIds = rfq.bidIds
 
+        //set user as buyer so he can open bidding
+        await setBuyerAsCurrentUser(rfqNo)
         await initPath(rfqNo)
         
         await openBiding(rfqNo)
 
+        //set user as seller so they can submit a bid
         for(let j = 0; j < bidIds.length; j++) {
+            await setSellerAsCurrentUser(bidIds[j])
             await submitBid(bidIds[j])
         }
 
+        //set user as buyer so they can close bidding and declare winner, rate seller
+        await setBuyerAsCurrentUser(rfqNo)
         await closeBidding(rfqNo)
 
         await declareWinner(rfqNo)
@@ -754,9 +769,17 @@ async function addAuctions() {
         let sellerComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
         await rateSeller(rfqNo, sellerRating, sellerComment)
 
+        //set user as seller of winning bid so they can rate buyer
+        rfq = await getRfq(rfqNo)
+        let winningBidId = rfq.winningBidId
+        await setSellerAsCurrentUser(winningBidId)
+
         let buyerRating = randomIntFromInterval(1, 10)
         let buyerComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
         await rateBuyer(rfqNo, buyerRating, buyerComment)
+
+        //set user as buyer so they can rate after sale service and complete the rfq
+        await setBuyerAsCurrentUser(rfqNo)
 
         let afterSaleRating = randomIntFromInterval(1, 10)
         let afterSaleComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
@@ -773,14 +796,20 @@ async function addAuctions() {
         let rfqNo = rfq.rfqNo
         let bidIds = rfq.bidIds
 
+        //set user as buyer so he can open bidding
+        await setBuyerAsCurrentUser(rfqNo)
         await initPath(rfqNo)
 
         await openBiding(rfqNo)
 
+        //set user as seller so they can submit a bid
         for(let j = 0; j < bidIds.length; j++) {
+            await setSellerAsCurrentUser(bidIds[j])
             await submitBid(bidIds[j])
         }
 
+        //set user as buyer so they can close bidding, set bid scores manually and declare winner, rate seller
+        await setBuyerAsCurrentUser(rfqNo)
         await closeBidding(rfqNo)
 
         let updatedScores = getUpdatedScores(rfq.rfqKpiIds)
@@ -793,9 +822,17 @@ async function addAuctions() {
         let sellerComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
         await rateSeller(rfqNo, sellerRating, sellerComment)
 
+        //set user as seller of winning bid so they can rate buyer
+        rfq = await getRfq(rfqNo)
+        let winningBidId = rfq.winningBidId
+        await setSellerAsCurrentUser(winningBidId)
+
         let buyerRating = randomIntFromInterval(1, 10)
         let buyerComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
         await rateBuyer(rfqNo, buyerRating, buyerComment)
+
+        //set user as buyer so they can rate after sale service and complete the rfq
+        await setBuyerAsCurrentUser(rfqNo)
 
         let afterSaleRating = randomIntFromInterval(1, 10)
         let afterSaleComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
@@ -812,19 +849,35 @@ async function addAuctions() {
         let rfqNo = rfq.rfqNo
         let bidIds = rfq.bidIds
 
+        //set user as buyer so he can open bidding
+        await setBuyerAsCurrentUser(rfqNo)
+        
+        await initPath(rfqNo)
+
         await openBiding(rfqNo)
 
+        //set user as seller so they can submit a bid
         for(let j = 0; j < bidIds.length; j++) {
+            await setSellerAsCurrentUser(bidIds[j])
             await submitBid(bidIds[j])
         }
 
+        //set user as buyer so they can close bidding, open auction
         await closeBidding(rfqNo)
 
         await openAuction(rfqNo)
 
         let kpiValues = await generateKpiValues(rfqNo)
         let bidId = getRandomBidId(bidIds)
+
+        
+        //set user as seller so they can submit offer
+        await setSellerAsCurrentUser(bidId)
+
         await submitOffer(bidId, kpiValues)
+
+        //set user as buyer so they can close auction, declare winner, rate seller
+        await setBuyerAsCurrentUser(rfqNo)
 
         await closeAuction(rfqNo)
 
@@ -834,9 +887,17 @@ async function addAuctions() {
         let sellerComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
         await rateSeller(rfqNo, sellerRating, sellerComment)
 
+        //set user as seller of winning bid so they can rate buyer
+        rfq = await getRfq(rfqNo)
+        let winningBidId = rfq.winningBidId
+        await setSellerAsCurrentUser(winningBidId)
+
         let buyerRating = randomIntFromInterval(1, 10)
         let buyerComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
         await rateBuyer(rfqNo, buyerRating, buyerComment)
+
+        //set user as buyer so they can rate after sale service and complete the rfq
+        await setBuyerAsCurrentUser(rfqNo)
 
         let afterSaleRating = randomIntFromInterval(1, 10)
         let afterSaleComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
@@ -853,11 +914,20 @@ async function addAuctions() {
         let rfqNo = rfq.rfqNo
         let bidIds = rfq.bidIds
 
+        //set user as buyer so he can open bidding
+        await setBuyerAsCurrentUser(rfqNo)
+        await initPath(rfqNo)
+
         await openBiding(rfqNo)
 
+        //set user as seller so they can submit a bid
         for(let j = 0; j < bidIds.length; j++) {
+            await setSellerAsCurrentUser(bidIds[j])
             await submitBid(bidIds[j])
         }
+
+        //set user as buyer so they can close bidding, open auction
+        await setBuyerAsCurrentUser(rfqNo)
 
         await closeBidding(rfqNo)
 
@@ -866,16 +936,30 @@ async function addAuctions() {
 
         let kpiValues1 = await generateKpiValues(rfqNo)
         let bidId1 = getRandomBidId(bidIds)
+
+        //set user as seller so they can submit offer
+        await setSellerAsCurrentUser(bidId1)
+
         await submitOffer(bidId1, kpiValues1)
 
         await closeAuction(rfqNo)
+
+        //set user as buyer so they can close bidding, open auction
+        await setBuyerAsCurrentUser(rfqNo)
 
         //AUCTION 2
         await openAuction(rfqNo)
 
         let kpiValues2 = await generateKpiValues(rfqNo)
         let bidId2 = getRandomBidId(bidIds)
+
+        //set user as seller so they can submit offer
+        await setSellerAsCurrentUser(bidId2)
+
         await submitOffer(bidId2, kpiValues2)
+
+        //set user as buyer so they can close auction, declare winner, rate seller
+        await setBuyerAsCurrentUser(rfqNo)
 
         await closeAuction(rfqNo)
 
@@ -885,9 +969,17 @@ async function addAuctions() {
         let sellerComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
         await rateSeller(rfqNo, sellerRating, sellerComment)
 
+        //set user as seller of winning bid so they can rate buyer
+        rfq = await getRfq(rfqNo)
+        let winningBidId = rfq.winningBidId
+        await setSellerAsCurrentUser(winningBidId)
+
         let buyerRating = randomIntFromInterval(1, 10)
         let buyerComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
         await rateBuyer(rfqNo, buyerRating, buyerComment)
+
+        //set user as buyer so they can rate after sale service and complete the rfq
+        await setBuyerAsCurrentUser(rfqNo)
 
         let afterSaleRating = randomIntFromInterval(1, 10)
         let afterSaleComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
@@ -904,11 +996,21 @@ async function addAuctions() {
         let rfqNo = rfq.rfqNo
         let bidIds = rfq.bidIds
 
+        //set user as buyer so he can open bidding
+        await setBuyerAsCurrentUser(rfqNo)
+
+        await initPath(rfqNo)
+        
         await openBiding(rfqNo)
 
+        //set user as seller so they can submit a bid
         for(let j = 0; j < bidIds.length; j++) {
+            await setSellerAsCurrentUser(bidIds[j])
             await submitBid(bidIds[j])
         }
+
+        //set user as buyer so they can close bidding, open auction
+        await setBuyerAsCurrentUser(rfqNo)
 
         await closeBidding(rfqNo)
 
@@ -917,7 +1019,14 @@ async function addAuctions() {
 
         let kpiValues1 = await generateKpiValues(rfqNo)
         let bidId1 = getRandomBidId(bidIds)
+
+        //set user as seller so they can submit offer
+        await setSellerAsCurrentUser(bidId1)
+
         await submitOffer(bidId1, kpiValues1)
+
+        //set user as buyer so they can close auction, open auction
+        await setBuyerAsCurrentUser(rfqNo)
 
         await closeAuction(rfqNo)
 
@@ -926,7 +1035,14 @@ async function addAuctions() {
 
         let kpiValues2 = await generateKpiValues(rfqNo)
         let bidId2 = getRandomBidId(bidIds)
+
+        //set user as seller so they can submit offer
+        await setSellerAsCurrentUser(bidId2)
+
         await submitOffer(bidId2, kpiValues2)
+
+        //set user as buyer so they can close auction, manual score, declare winner, rate seller
+        await setBuyerAsCurrentUser(rfqNo)
 
         await closeAuction(rfqNo)
 
@@ -941,9 +1057,17 @@ async function addAuctions() {
         let sellerComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
         await rateSeller(rfqNo, sellerRating, sellerComment)
 
+        //set user as seller of winning bid so they can rate buyer
+        rfq = await getRfq(rfqNo)
+        let winningBidId = rfq.winningBidId
+        await setSellerAsCurrentUser(winningBidId)
+
         let buyerRating = randomIntFromInterval(1, 10)
         let buyerComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
         await rateBuyer(rfqNo, buyerRating, buyerComment)
+
+        //set user as buyer so they can rate after sale service and complete the rfq
+        await setBuyerAsCurrentUser(rfqNo)
 
         let afterSaleRating = randomIntFromInterval(1, 10)
         let afterSaleComment = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
@@ -960,20 +1084,35 @@ async function addAuctions() {
         let rfqNo = rfq.rfqNo
         let bidIds = rfq.bidIds
 
+        //set user as buyer so he can open bidding
+        await setBuyerAsCurrentUser(rfqNo)
+
         await initPath(rfqNo)
         
         await openBiding(rfqNo)
 
+        //set user as seller so they can submit a bid
         for(let j = 0; j < bidIds.length; j++) {
+            await setSellerAsCurrentUser(bidIds[j])
             await submitBid(bidIds[j])
         }
+        //set user as buyer so they can close bidding, declare winner
+        await setBuyerAsCurrentUser(rfqNo)
 
         await closeBidding(rfqNo)
 
         await declareWinner(rfqNo)
+
         rfq = await getRfq(rfqNo)
         let winningBidId = rfq.winningBidId
+
+        //set user as seller so they can withdraw bid
+        await setSellerAsCurrentUser(winningBidId)
+
         await withdrawBid(winningBidId)
+
+        //set user as buyer so they can complete rfq
+        await setBuyerAsCurrentUser(rfqNo)
 
         await completeRfq(rfqNo)
 
@@ -986,13 +1125,21 @@ async function addAuctions() {
         let rfqNo = rfq.rfqNo
         let bidIds = rfq.bidIds
 
+        //set user as buyer so he can open bidding
+        await setBuyerAsCurrentUser(rfqNo)
+
         await initPath(rfqNo)
         
         await openBiding(rfqNo)
 
+        //set user as seller so they can submit a bid
         for(let j = 0; j < bidIds.length; j++) {
+            await setSellerAsCurrentUser(bidIds[j])
             await submitBid(bidIds[j])
         }
+
+        //set user as buyer so they can close bidding, cancel rfq
+        await setBuyerAsCurrentUser(rfqNo)
 
         await closeBidding(rfqNo)
 
@@ -1000,82 +1147,54 @@ async function addAuctions() {
 
     }
 
-/*
-    //await logRfqs()
-    //await logRfqs()
+}
 
-    //await closeBidding(rfq.rfqNo)
-    //await logRfqs()
-    //await logBids(rfq.rfqNo)
-    //await logOffers(rfq.rfqNo)
+async function setBuyerAsCurrentUser(rfqNo) {
+    let rfq = await getRfq(rfqNo)
+    let userAddress = rfq.buyer
+    setAsCurrentUser(userAddress)
+}
 
-    //await setBidScoresManually(bidId, updatedScores)
-    //await openAuction(rfq.rfqNo)
-    //await submitOffer(bidId, kpiValues)
-    //await closeAuction(rfqNo)
-    //await declareWinner(rfqNo)
-    //await withdrawBid(bidId)
-    //await rateSeller(rfqNo, rating, comments)
-    //await rateBuyer(rfqNo, rating, comments)
-    //await rateAfterSale(rfqNo, rating, comments)
-    //await markRfqAsCompleted(rfqNo)
+async function setSellerAsCurrentUser(bidId) {
+    let bid = await getBid(bidId)
+    let userAddress = bid.seller
+    setAsCurrentUser(userAddress)
+}
 
-*/
+async function calculateStats() {
 
-    /*
-    let rfqs = await getRfqs()
-    let rfq = rfqs[0]
-    let rfqNo = rfq.rfqNo
-    //console.log("rfqNo", rfqNo)
-    //open for bidding
-    await openBidding(rfqNo)
+    //console.log(txReceipts)
+
+    let stats = {
+        totalGasUsed: 0,
+        gasByMethod: new Map(),
+        addMethodGas: function(method, gas) {
+            let methodGas = []
+            if(!this.gasByMethod.has(method)) {
+                methodGas.push(gas)
+            } else {
+                methodGas = this.gasByMethod.get(method)
+                methodGas.push(gas)
+            }
+            this.gasByMethod.set(method, methodGas)
+        }
+
+    }
     
-    //submit bids
-    await submitBid(rfq.bidIds[0])
+    let keys = Array.from( txReceipts.keys() )
+    for(let i = 0; i < keys.length; i++) {
+        let key = keys[i]
+        let receipts = txReceipts.get(key)
+        for(let j = 0; j < receipts.length; j++) {
+            let receipt = receipts[j]
+            let gasUsed = receipt.gasUsed
+            stats.totalGasUsed += parseInt(gasUsed)
+            stats.addMethodGas(key, parseInt(gasUsed))
 
-    //close for bidding
-    
-    rfqs = await getRfqs()
-    let bid = await getBid(rfq.bidIds[0])
-    //console.log(rfqs[0])
-    //console.log(bid)
+        }
+    }
 
-    await closeBidding(rfqNo)
-    await scoreRfq(1)
-
-    rfqs = await getRfqs([], true)
-    rfq = rfqs[0]
-    //bid = await getBid(rfq.bidIds[0])
-
-    console.log(rfqs[0])
-    console.log(rfqs[0].rfqKpis)
-    //console.log(bid)
-
-    //let bids = await getBids()
-    //console.log(bids)
-
-
-    //modify kpi || continue with automated calcualtions
-    //declare winniner
-    //rate seller
-    //rate buyer
-    //rate after-sale
-
-    //open for bidding
-    //submit bids
-    //close for bidding
-    //modify kpi || continue with automated calcualtions
-    //enter auction (1-5 rounds)
-    //counteroffer
-    //modify kpi || continue with automated
-    //close auction
-    //declare winniner
-    //rate seller
-    //rate buyer
-    //rate after-sale
-*/
-
-
+    console.log(stats)
 }
 
 function getStartingIndexForPath(pathNo) {
@@ -1166,167 +1285,229 @@ async function logAuction(action, args = {rfqNo: 0, bidId: 0}) {
     let bidId = args.bidId
     
     if(action == ACTIONS.ADD_RFQ) {
-        let rfq = await getRfq(rfqNo)
-        console.log(`\nStarting path for RFQ #${rfqNo}.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
-        console.log(`rfq.bidIds: ${rfq.bidIds}`)
-        let bidScores = await getBidScores(rfqNo)
-        let bidStatuses = await getBidStatuses(rfqNo)
-        console.log(`Bid Scores:`)
-        console.log(bidScores)
-        console.log(`Bid Statuses:`)
-        console.log(bidStatuses)
+        let rfq = await getRfq(rfqNo, true)
+        logs.auctionLogActions && console.log(`\n****ACTION: ADD RFQ****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`Starting path for RFQ #${rfqNo}.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        logs.auctionLogStatuses && console.log(`rfq.bidIds: ${rfq.bidIds}`)
+        let bidLogs = await getBidLogs(rfqNo)
+        //let bidStatuses = await getBidStatuses(rfqNo)
+        logs.auctionLogStatuses && console.log(`rfq.kpiList:`)
+        logs.auctionLogStatuses && console.log(rfq.kpiList)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
     
     if(action == ACTIONS.OPEN_BIDDING) {
         let rfq = await getRfq(rfqNo)
-        console.log(`\nBidding opened for RFQ #${rfqNo}.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
-        console.log(`rfq.round: ${rfq.round}.`)
+        logs.auctionLogActions && console.log(`\n****ACTION: OPEN BIDDING****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`Bidding opened for RFQ #${rfqNo}.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        logs.auctionLogStatuses && console.log(`rfq.round: ${rfq.round}.`)
     }
     
     if(action == ACTIONS.SUBMIT_BID) {
         let bid = await getBid(bidId)
-        console.log(`\nBid #${bidId} submitted.`)
-        console.log(`bid.status: ${bid.statusString}.`)
+        logs.auctionLogActions && console.log(`\n****ACTION: SUBMIT BID****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`Bid #${bidId} submitted.`)
+        let bidLogs = await getBidLogs(bid.rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
     
     if(action == ACTIONS.CLOSE_BIDDING) {
         let rfq = await getRfq(rfqNo)
-        console.log(`\nBidding closed for RFQ #${rfqNo}; scores automatically calculated.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
-        let bidScores = await getBidScores(rfqNo)
-        console.log(`Bid Scores:`)
-        console.log(bidScores)
+        logs.auctionLogActions &&  console.log(`\n****ACTION: CLOSE BIDDING****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`Bidding closed for RFQ #${rfqNo}; scores automatically calculated.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        let bidLogs = await getBidLogs(rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
         
     if(action == ACTIONS.OPEN_AUCTION) {
         let rfq = await getRfq(rfqNo)
-        console.log(`\nAuction opened for RFQ #${rfqNo}.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
-        console.log(`rfq.round: ${rfq.round}.`)
-        let bidScores = await getBidScores(rfqNo)
-        let bidStatuses = await getBidStatuses(rfqNo)
-        console.log(`Bid Scores:`)
-        console.log(bidScores)
-        console.log(`Bid Statuses:`)
-        console.log(bidStatuses)
+        logs.auctionLogActions && console.log(`\n****ACTION: OPEN AUCTION****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`Auction opened for RFQ #${rfqNo}.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        logs.auctionLogStatuses && console.log(`rfq.round: ${rfq.round}.`)
+        let bidLogs = await getBidLogs(rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
 
     if(action == ACTIONS.SUBMIT_OFFER) {
         let bid = await getBid(bidId)
         let rfq = await getRfq(bid.rfqNo)
         let rfqNo = rfq.rfqNo
-        console.log(`\nOffer submitted for Bid #${bidId}.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
-        console.log(`rfq.round: ${rfq.round}.`)
-        let bidScores = await getBidScores(rfqNo)
-        let bidStatuses = await getBidStatuses(rfqNo)
-        console.log(`Bid Scores:`)
-        console.log(bidScores)
-        console.log(`Bid Statuses:`)
-        console.log(bidStatuses)
+        logs.auctionLogActions && console.log(`\n****ACTION: SUBMIT OFFER****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`Offer submitted for Bid #${bidId}.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        logs.auctionLogStatuses && console.log(`rfq.round: ${rfq.round}.`)
+        let bidLogs = await getBidLogs(rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
 
     if(action == ACTIONS.CLOSE_AUCTION) {
         let rfq = await getRfq(rfqNo)
-        console.log(`\nAuction closed for RFQ #${rfqNo}; scores automatically calculated.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
-        console.log(`rfq.round: ${rfq.round}.`)
-        let bidScores = await getBidScores(rfqNo)
-        let bidStatuses = await getBidStatuses(rfqNo)
-        console.log(`Bid Scores:`)
-        console.log(bidScores)
-        console.log(`Bid Statuses:`)
-        console.log(bidStatuses)
+        logs.auctionLogActions && console.log(`\n****ACTION: CLOSE AUCTION****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`Auction closed for RFQ #${rfqNo}; scores automatically calculated.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        logs.auctionLogStatuses && console.log(`rfq.round: ${rfq.round}.`)
+        let bidLogs = await getBidLogs(rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
        
     if(action == ACTIONS.DECLARE_WINNER) {
         let rfq = await getRfq(rfqNo)
-        console.log(`\nWinner declared for RFQ #${rfqNo}.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
-        let bidScores = await getBidScores(rfqNo)
-        let bidStatuses = await getBidStatuses(rfqNo)
-        console.log(`Bid Scores:`)
-        console.log(bidScores)
-        console.log(`Bid Statuses:`)
-        console.log(bidStatuses)
+        logs.auctionLogActions && console.log(`\n****ACTION: DECLARE WINNER****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`Winner declared for RFQ #${rfqNo}.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        let bidLogs = await getBidLogs(rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
 
     if(action == ACTIONS.CANCEL_RFQ) {
         let rfq = await getRfq(rfqNo)
-        console.log(`\nRFQ #${rfqNo} canceled.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
-        let bidStatuses = await getBidStatuses(rfqNo)
-        console.log(`Bid Statuses:`)
-        console.log(bidStatuses)
+        logs.auctionLogActions && console.log(`\n****ACTION: CANCEL RFQ****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`RFQ #${rfqNo} canceled.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        let bidLogs = await getBidLogs(rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
     
     if(action == ACTIONS.WITHDRAW_BID) {
         let bid = await getBid(bidId)
         let rfq = await getRfq(bid.rfqNo)
-        console.log(`\nBid #${bidId} withdrawn.`)
-        console.log(`bid.status: ${bid.statusString}.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogActions && console.log(`\n****ACTION: WITHDRAW BID****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`Bid #${bidId} withdrawn.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        let bidLogs = await getBidLogs(rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
 
     if(action == ACTIONS.RATE_SELLER) {
         let rfq = await getRfq(rfqNo)
         let winningBidId = rfq.winningBidId
         let bid = await getBid(winningBidId)
-        console.log(`\nSeller rated for Bid #${rfqNo}.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
-        let bidStatuses = await getBidStatuses(rfqNo)
-        console.log(`Bid Statuses:`)
-        console.log(bidStatuses)
-        console.log(`Bid Seller Ratings: ${bid.sellerRating}, comments: ${formatComment(bid.sellerRatingComments)}`)
+        logs.auctionLogActions && console.log(`\n****ACTION: RATE SELLER****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`Seller rated for Bid #${rfqNo}.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        logs.auctionLogStatuses && console.log(`Bid Seller Ratings: ${bid.sellerRating}, comments: ${formatComment(bid.sellerRatingComments)}`)
+        let bidLogs = await getBidLogs(rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
     
     if(action == ACTIONS.RATE_BUYER) {
         let rfq = await getRfq(rfqNo)
         let winningBidId = rfq.winningBidId
         let bid = await getBid(winningBidId)
-        console.log(`\nBuyer rated for Bid #${rfqNo}.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
-        let bidStatuses = await getBidStatuses(rfqNo)
-        console.log(`Bid Statuses:`)
-        console.log(bidStatuses)
-        console.log(`Bid Seller Ratings: ${bid.sellerRating}, comments: ${formatComment(bid.sellerRatingComments)}`)
-        console.log(`Bid Buyer Ratings: ${bid.buyerRating}, comments: ${formatComment(bid.buyerRatingComments)}`)
+        logs.auctionLogActions && console.log(`\n****ACTION: RATE BUYER****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`Buyer rated for Bid #${rfqNo}.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        logs.auctionLogStatuses && console.log(`Bid Seller Ratings: ${bid.sellerRating}, comments: ${formatComment(bid.sellerRatingComments)}`)
+        logs.auctionLogStatuses && console.log(`Bid Buyer Ratings: ${bid.buyerRating}, comments: ${formatComment(bid.buyerRatingComments)}`)
+        let bidLogs = await getBidLogs(rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
     
     if(action == ACTIONS.RATE_AFTER_SALE) {
         let rfq = await getRfq(rfqNo)
         let winningBidId = rfq.winningBidId
         let bid = await getBid(winningBidId)
-        console.log(`\nSeller after-sale services rated for RFQ #${rfqNo}.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
-        let bidStatuses = await getBidStatuses(rfqNo)
-        console.log(`Bid Statuses:`)
-        console.log(bidStatuses)
-        console.log(`Bid Seller Ratings: ${bid.sellerRating}, comments: ${formatComment(bid.sellerRatingComments)}`)
-        console.log(`Bid Buyer Ratings: ${bid.buyerRating}, comments: ${formatComment(bid.buyerRatingComments)}`)
-        console.log(`Bid After Sale Ratings: ${bid.afterSaleRating}, comments: ${formatComment(bid.afterSaleRatingComments)}`)
+        logs.auctionLogActions &&  console.log(`\n****ACTION: RATE AFTER SALE****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions &&  console.log(`Seller after-sale services rated for RFQ #${rfqNo}.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        logs.auctionLogStatuses && console.log(`Bid Seller Ratings: ${bid.sellerRating}, comments: ${formatComment(bid.sellerRatingComments)}`)
+        logs.auctionLogStatuses && console.log(`Bid Buyer Ratings: ${bid.buyerRating}, comments: ${formatComment(bid.buyerRatingComments)}`)
+        logs.auctionLogStatuses && console.log(`Bid After Sale Ratings: ${bid.afterSaleRating}, comments: ${formatComment(bid.afterSaleRatingComments)}`)
+        let bidLogs = await getBidLogs(rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
     
     if(action == ACTIONS.COMPLETE_RFQ) {
         let rfq = await getRfq(rfqNo)
-        console.log(`\nRFQ #${rfqNo} completed.`)
-        console.log(`rfq.status: ${rfq.statusString}.`)
-        let bidStatuses = await getBidStatuses(rfqNo)
-        console.log(`Bid Statuses:`)
-        console.log(bidStatuses)
+        logs.auctionLogActions && console.log(`\n****ACTION: COMPLETE RFQ****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`RFQ #${rfqNo} completed.`)
+        logs.auctionLogStatuses && console.log(`rfq.status: ${rfq.statusString}.`)
+        logs.auctionLogUsers && console.log(`rfq.buyer: ${rfq.buyerName}.`)
+        let bidLogs = await getBidLogs(rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
 
     if(action == ACTIONS.UPDATE_SCORES_MANUALLY) {
         let bid = await getBid(bidId)
         let rfqNo = bid.rfqNo
-        console.log(`\nScores of bid #${bidId} updated manually.`)
-        let bidScores = await getBidScores(rfqNo)
-        console.log(`Bid Scores:`)
-        console.log(bidScores)
+        logs.auctionLogActions &&  console.log(`\n****ACTION: UPDATE SCORES MANUALLY****`)
+        logs.auctionLogUsers && console.log(`currentUser: ${getCurrentUser(true)}`)
+        logs.auctionLogActions && console.log(`Scores of bid #${bidId} updated manually.`)
+        let bidLogs = await getBidLogs(rfqNo)
+        logs.auctionLogBids && console.log(`Bid Logs:`)
+        logs.auctionLogBids && console.log(bidLogs)
     }
 
+}
+
+
+async function getBidLogs(rfqNo) {
+    let bidScores = new Map()
+    let rfq = await getRfq(rfqNo)
+    let bidIds = rfq.bidIds
+    for(let i = 0; i < bidIds.length; i++) {
+        let bidLog = {}
+
+        let bid = await getBid(bidIds[i])
+
+        let latestOfferId = bid.latestOfferId
+        let offer = await getOffer(latestOfferId)
+
+        if( logs.auctionLogStatuses ) bidLog["bidStatus"] = bid.statusString
+        if( logs.auctionLogStatuses ) bidLog["bidScore"] = bid.score
+        if( logs.auctionLogOffers ) bidLog["offerId"] = offer.offerId
+        if( logs.auctionLogOffers ) bidLog["kpiValues"] = offer.kpiValues
+        if( logs.auctionLogOffers ) bidLog["kpiScores"] = offer.kpiScores
+        if( logs.auctionLogUsers ) bidLog["sellerName"] = bid.sellerName
+
+        bidScores.set(bid.bidId, bidLog)
+            
+    
+    }
+    return bidScores
 }
 
 async function getBidScores(rfqNo) {
@@ -1334,10 +1515,16 @@ async function getBidScores(rfqNo) {
     let rfq = await getRfq(rfqNo)
     let bidIds = rfq.bidIds
     for(let i = 0; i < bidIds.length; i++) {
+        let bidLog = {}
         let bid = await getBid(bidIds[i])
-        bidScores.set(bid.bidId, bid.score)
+        bidScores.set(bid.bidId, bid.score)           
+    
     }
     return bidScores
+}
+
+async function getOfferValuesAndScores(rfqNo) {
+
 }
 
 async function getBidStatuses(rfqNo) {
@@ -1359,34 +1546,21 @@ function getStatusByCode(statusEnumObject, code) {
         }
     }
 }
+function getScoreRuleByCode(ruleEnumObject, code) {
+    let rules = Object.keys(ruleEnumObject)
+    for(let i = 0; i < rules.length; i++) {
+        let rule = rules[i]
+        if(ruleEnumObject[rule] == code) {
+            return rule
+        }
+    }
+}
 
 function formatComment(comment) {
     let commentLength = 35
     let shorterComment = comment.substring(0, commentLength)
     let formattedComment = shorterComment + "..."
     return formattedComment
-}
-
-async function logRfqs(rfqNos = []) {
-    let rfqs = await getRfqs(rfqNos)
-    console.log(rfqs)
-}
-async function logBids(rfqNo) {
-    let rfq = await getRfq(rfqNo)
-    let bidIds = rfq.bidIds
-    let bids = await getBids(bidIds)
-    console.log(bids)
-}
-async function logOffers(rfqNo) {
-    let rfq = await getRfq(rfqNo)
-    let bidIds = rfq.bidIds
-    let bids = await getBids(bidIds)
-    let offersToLog = []
-    for(let i = 0; i < bids.length; i++) {
-        let offer = await getOffer(bids[i].latestOfferId)
-        offersToLog.push(offer)
-    }
-    console.log(offersToLog)
 }
 
 function getLeadTime(idealLeadTime, mode) {
@@ -1407,19 +1581,13 @@ function getMinQuantity(quantity) {
 
 }
 
-function convertToWei(number) {
-    
-    let bigNumber = provider.utils.toWei(number.toString(), "ether")
-    return bigNumber
-}
-
 //checks whether the supplier can bid for the rfq (by comparing whether he sells all of the rfq's products)
 function canBid(user, rfq) {
     return true
 }
 
 function getKpiValue(kpiGrouIpd, kpiId) {
-    return randomIntFromInterval(5, 50)
+    return randomIntFromInterval(10, 350)
 }
 
 async function initKpis() {
@@ -1545,6 +1713,9 @@ async function deploy(contractName, arguments) {
         })
         logs.contractDeployment && console.log(`Contract "${contractName}" deployed at address: ${tx.options.address}`)
 
+        let receipt = await provider.eth.getTransactionReceipt(txHash)
+        addReceipt(`Deploy.${contractName}`, receipt)
+
         return [tx.options.address, provider, txHash]
     } catch (error) {
         console.error(error)
@@ -1575,12 +1746,14 @@ async function deployContract(contract, arguments = []) {
 
 async function toggleVerify(userAddress) {
     try {
-        let result = await contracts.users.contract.methods.toggleVerify(userAddress).send({
+        let receipt = await contracts.users.contract.methods.toggleVerify(userAddress).send({
             from: getCurrentUser(),
             gas: 1000000,
             gasPrice: 10000000000,
         })
-        return result
+        
+        addReceipt(`users.toggleVerify`, receipt)
+        return receipt
 
     } catch(error) {
         console.log("toggleVerify(): error executing function")
@@ -1599,17 +1772,21 @@ async function registerUser(userType, name, contactDetails, productBarcodes, pro
         if(contract) {
 
             //console.log(`User ${contractData.userAddress} registeration initiate on  contract ${contractData.userAddress}.`)
-            storedUser = await contract.methods.register(userType, name,contactDetails, productBarcodes).send({
+            let receipt = await contract.methods.register(userType, name,contactDetails, productBarcodes).send({
                 from: getCurrentUser(),
                 gas: 1000000,
                 gasPrice: 10000000000,
             })
+            addReceipt("Users.register", receipt)
             //console.log(`User ${contractData.userAddress} registered successfully on  contract ${contractData.contractAddress}.`)
             if(products.length != 0) {
                 //console.log(`User ${contractData.userAddress} product registeration initiated.`)
                 for(let i = 0; i < products.length; i++) {
                     let product = products[i]
-                    storedProducts.push( await addProduct(product.barcode, product.productName, product.specsURI) )
+                    let receipt = await addProduct(product.barcode, product.productName, product.specsURI)
+                    addReceipt("Products.addProduct", receipt)
+                    
+                    storedProducts.push( receipt )
                 }
                 //console.log(`User ${contractData.userAddress} products registered successfully.`)
             } 
@@ -1719,19 +1896,23 @@ function randomIntFromInterval(min, max) {
 //userIsVerified userIsBuyer
 async function addRfq(docURI, externalId) {
     
-    result = await contracts.rfqs.contract.methods.addRFQ(docURI, externalId).send({
+    let receipt = await contracts.rfqs.contract.methods.addRFQ(docURI, externalId).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    
+    addReceipt(`rfqs.addRFQ`, receipt)
 }
 async function increaseRound(rfqNo) {
     
-    result = await contracts.rfqs.contract.methods.increaseRound(rfqNo).send({
+    let receipt = await contracts.rfqs.contract.methods.increaseRound(rfqNo).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    
+    addReceipt(`rfqs.increaseRound`, receipt)
 }
 
 async function addRfqProduct(rfqNo, barcode, quantity, shipTo, idealLeadTime, idealShippingTime) {
@@ -1745,11 +1926,13 @@ async function addRfqProduct(rfqNo, barcode, quantity, shipTo, idealLeadTime, id
     let weiIdealShippingTime = provider.utils.toWei(idealShippingTime.toString(), "ether")
 
 
-    result = await contracts.rfqs.contract.methods.addRFQProduct(rfqNo, barcode, weiQuantity, shipTo, weiIdealLeadTime, weiIdealShippingTime).send({
+    let receipt = await contracts.rfqs.contract.methods.addRFQProduct(rfqNo, barcode, weiQuantity, shipTo, weiIdealLeadTime, weiIdealShippingTime).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    
+    addReceipt(`rfqs.addRfqProduct`, receipt)
 }
 
 async function addRfqKpi(rfqNo, kpiGroupId, kpiId, kpiWeight, scoreRule, comments) {
@@ -1757,11 +1940,13 @@ async function addRfqKpi(rfqNo, kpiGroupId, kpiId, kpiWeight, scoreRule, comment
     
     let weiKpiWeight = provider.utils.toWei(kpiWeight.toString(), "ether")
 
-    result = await contracts.rfqs.contract.methods.addRfqKpi(rfqNo, kpiGroupId, kpiId, weiKpiWeight, scoreRule, comments).send({
+    let receipt = await contracts.rfqs.contract.methods.addRfqKpi(rfqNo, kpiGroupId, kpiId, weiKpiWeight, scoreRule, comments).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    
+    addReceipt(`rfqs.addRfqKpi`, receipt)
 
 }
 
@@ -1812,18 +1997,44 @@ async function getRfq(rfqNo, complete = false) {
 
             rfqKpi["kpi"] = kpis[kpiGroupId][kpiId]
             rfqKpi["kpiGroup"] = kpiGroups[kpiGroupId]
+            rfqKpi["scoreRuleString"] = getScoreRuleByCode(SCORE_RULE, rfqKpi.scoreRule)
 
             rfqKpis.push(rfqKpi)
         }
 
         rfq["rfqProducts"] = rfqProducts
         rfq["rfqKpis"] = rfqKpis
+        rfq["kpiList"] = await getKpiList(rfq)
+        rfq["buyerName"] = getUserNameByAddress(rfq.buyer)
 
     }
     rfq["statusString"] = getStatusByCode(RFQ_STATUS, rfq.status)
 
     return rfq
 
+}
+
+//returns a list of KPIs, each KPI with its weight
+async function getKpiList(rfq) {
+    let kpisWeightsList = []
+
+    let rfqKpis = rfq.rfqKpis
+    
+    for(let i = 0; i < rfqKpis.length; i++) {
+        let item = []
+
+        let rfqKpi = rfqKpis[i]
+
+        item.push(rfqKpi.kpiGroup)
+        item.push(rfqKpi.kpi)
+        item.push(rfqKpi.scoreRuleString)
+        item.push(rfqKpi.weight/1000)
+
+        kpisWeightsList.push(item)
+    }
+
+    return kpisWeightsList
+    
 }
 
 async function getRfqProduct(rfqProductId) {
@@ -1842,11 +2053,13 @@ async function getRfqKpi(rfqKpiId) {
 
 async function initKpiGroup(group, kpis) {
     
-    result = await contracts.rfqs.contract.methods.initKpiGroup(group, kpis).send({
+    let receipt = await contracts.rfqs.contract.methods.initKpiGroup(group, kpis).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    
+    addReceipt(`rfqs.initKpiGroup`, receipt)
 }
 
 async function getKpis() {
@@ -1867,11 +2080,14 @@ async function addBid(rfqNo, externalId, kpiValues) {
         kpiValues[i] = provider.utils.toWei(kpiValues[i].toString(), "ether")
     }
 
-    result = await contracts.bids.contract.methods.addBid(rfqNo, externalId, kpiValues).send({
+    let receipt = await contracts.bids.contract.methods.addBid(rfqNo, externalId, kpiValues).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+
+    
+    addReceipt(`bids.addBid`, receipt)
 
 }
 
@@ -1936,6 +2152,7 @@ async function getBid(bidId, complete = false) {
         bid["bidFiles"] = bidFiles
         bid["offers"] = offers
     }
+    bid["sellerName"] = getUserNameByAddress(bid.seller)
     bid["statusString"] = getStatusByCode(BID_STATUS, bid.status)
 
     return bid
@@ -1948,11 +2165,14 @@ async function addOffer(bidId, kpiValues) {
         kpiValues[i] = provider.utils.toWei(kpiValues[i].toString(), "ether")
     }
 
-    result = await contracts.bids.contract.methods.addOffer(bidId, kpiValues).send({
+    let receipt = await contracts.bids.contract.methods.addOffer(bidId, kpiValues).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+
+    
+    addReceipt(`bids.addOffer`, receipt)
 }
 
 async function getOfferIds() {
@@ -2008,7 +2228,7 @@ async function addBidProduct(bidId, rfqProductId, pricePerUnit, leadTime, shippi
     let weiCustomizations = provider.utils.toWei(customizations.toString(), "ether")
     let weiMinQuantity = provider.utils.toWei(minQuantity.toString(), "ether")
 
-    result = await contracts.bids.contract.methods.addBidProduct(
+    let receipt = await contracts.bids.contract.methods.addBidProduct(
         bidId, 
         rfqProductId, 
         weiPricePerUnit, 
@@ -2021,6 +2241,9 @@ async function addBidProduct(bidId, rfqProductId, pricePerUnit, leadTime, shippi
         gas: 1000000,
         gasPrice: 10000000000,
     })
+
+    
+    addReceipt(`bids.addBidProduct`, receipt)
 
 }
 
@@ -2038,11 +2261,13 @@ async function getBidProduct(bidProductId) {
 }
 
 async function addBidFile(bidId, fileType, fileURI) {
-    result = await contracts.bids.contract.methods.addBidFile(bidId, fileType, fileURI).send({
+    let receipt = await contracts.bids.contract.methods.addBidFile(bidId, fileType, fileURI).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+
+    addReceipt(`bids.addBidFile`, receipt)
 
 }
 
@@ -2057,24 +2282,25 @@ function getRandomString() {
 }
 
 async function initPath(rfqNo) {
-    await logAuction(ACTIONS.ADD_RFQ, {rfqNo: rfqNo, bidId: 0})
+    logs.addingAuctions && await logAuction(ACTIONS.ADD_RFQ, {rfqNo: rfqNo, bidId: 0})
 }
 
 async function openBiding(rfqNo) {
+
     await updateRfqStatus(rfqNo, RFQ_STATUS.BIDDING_OPEN)
     await increaseRound(rfqNo)
-    await logAuction(ACTIONS.OPEN_BIDDING, { rfqNo: rfqNo, bidId: 0 })
+    logs.addingAuctions && await logAuction(ACTIONS.OPEN_BIDDING, { rfqNo: rfqNo, bidId: 0 })
 }
 
 async function submitBid(bidId) {
     await updateBidStatus(bidId, BID_STATUS.SUBMITTED)
-    await logAuction(ACTIONS.SUBMIT_BID, { rfqNo: 0, bidId: bidId })
+    logs.addingAuctions && await logAuction(ACTIONS.SUBMIT_BID, { rfqNo: 0, bidId: bidId })
 }
 
 async function closeBidding(rfqNo) {
     await updateRfqStatus(rfqNo, RFQ_STATUS.REVIEWING_BIDS)
     await scoreRfq(rfqNo)
-    await logAuction(ACTIONS.CLOSE_BIDDING, { rfqNo: rfqNo, bidId: 0 })
+    logs.addingAuctions && await logAuction(ACTIONS.CLOSE_BIDDING, { rfqNo: rfqNo, bidId: 0 })
 }
 
 async function setBidScoresManually(bidId, updatedScores) {   
@@ -2093,7 +2319,7 @@ async function setBidScoresManually(bidId, updatedScores) {
     //console.log("offerScores After Updating", offer1.kpiScores)
 
     await calculateFinalScores(bid.rfqNo)
-    await logAuction(ACTIONS.UPDATE_SCORES_MANUALLY, { rfqNo: 0, bidId: bidId })
+    logs.addingAuctions && await logAuction(ACTIONS.UPDATE_SCORES_MANUALLY, { rfqNo: 0, bidId: bidId })
 }
 
 async function openAuction(rfqNo) {
@@ -2110,7 +2336,7 @@ async function openAuction(rfqNo) {
         }
     }
     
-    await logAuction(ACTIONS.OPEN_AUCTION, { rfqNo: rfqNo, bidId: 0 })
+    logs.addingAuctions && await logAuction(ACTIONS.OPEN_AUCTION, { rfqNo: rfqNo, bidId: 0 })
 }
 
 async function submitOffer(bidId, kpiValues) {
@@ -2120,7 +2346,7 @@ async function submitOffer(bidId, kpiValues) {
     //let bid = await getBid(bidId)
     //console.log("bid", bid)
 
-    await logAuction(ACTIONS.SUBMIT_OFFER, { rfqNo: 0, bidId: bidId })
+    logs.addingAuctions && await logAuction(ACTIONS.SUBMIT_OFFER, { rfqNo: 0, bidId: bidId })
 }
 
 async function closeAuction(rfqNo) {
@@ -2128,7 +2354,7 @@ async function closeAuction(rfqNo) {
 
     await scoreRfq(rfqNo)
     
-    await logAuction(ACTIONS.CLOSE_AUCTION, { rfqNo: rfqNo, bidId: 0 })
+    logs.addingAuctions && await logAuction(ACTIONS.CLOSE_AUCTION, { rfqNo: rfqNo, bidId: 0 })
 
 }
 
@@ -2146,7 +2372,7 @@ async function declareWinner(rfqNo) {
         }
     }
     
-    await logAuction(ACTIONS.DECLARE_WINNER, { rfqNo: rfqNo, bidId: 0 })
+    logs.addingAuctions && await logAuction(ACTIONS.DECLARE_WINNER, { rfqNo: rfqNo, bidId: 0 })
 }
 
 async function withdrawBid(bidId) {
@@ -2159,7 +2385,7 @@ async function withdrawBid(bidId) {
         await updateRfqStatus(rfqNo, RFQ_STATUS.WIINNER_WITHDRAWN)
     }
     
-    await logAuction(ACTIONS.WITHDRAW_BID, { rfqNo: 0, bidId: bidId })
+    logs.addingAuctions && await logAuction(ACTIONS.WITHDRAW_BID, { rfqNo: 0, bidId: bidId })
 }
 
 async function rateSeller(rfqNo, rating, comments) {
@@ -2170,7 +2396,7 @@ async function rateSeller(rfqNo, rating, comments) {
     await setSellerRating(winningBidId, rating, comments)
     await updateBidStatus(winningBidId, BID_STATUS.SELLER_RATED)
 
-    await logAuction(ACTIONS.RATE_SELLER, { rfqNo: rfqNo, bidId: 0 })
+    logs.addingAuctions && await logAuction(ACTIONS.RATE_SELLER, { rfqNo: rfqNo, bidId: 0 })
     //update rating of seller on user object
     
 }
@@ -2183,7 +2409,7 @@ async function rateBuyer(rfqNo, rating, comments) {
     await setBuyerRating(winningBidId, rating, comments)
     await updateBidStatus(winningBidId, BID_STATUS.BUYER_RATED)
 
-    await logAuction(ACTIONS.RATE_BUYER, { rfqNo: rfqNo, bidId: 0 })
+    logs.addingAuctions && await logAuction(ACTIONS.RATE_BUYER, { rfqNo: rfqNo, bidId: 0 })
 
     //update rating of seller on user object
 }
@@ -2196,7 +2422,7 @@ async function rateAfterSale(rfqNo, rating, comments) {
     await setAfterSaleRating(winningBidId, rating, comments)
     await updateBidStatus(winningBidId, BID_STATUS.AFTER_SALE_RATED)
 
-    await logAuction(ACTIONS.RATE_AFTER_SALE, { rfqNo: rfqNo, bidId: 0 })
+    logs.addingAuctions && await logAuction(ACTIONS.RATE_AFTER_SALE, { rfqNo: rfqNo, bidId: 0 })
     //update rating of seller on user object
 }
 
@@ -2204,12 +2430,11 @@ async function completeRfq(rfqNo) {
     await updateRfqStatus(rfqNo, RFQ_STATUS.COMPLETED)
     //update bid statuses accordingly
     let rfq = await getRfq(rfqNo)
-    let bids = await getBids(rfq.bidIds)
-    for(let i = 0; i < bids.length; i++) {
-        await updateBidStatus(bids[i].bidId, BID_STATUS.RFQ_COMPLETED)
-    }
+
+    let winningBidId = rfq.winningBidId
+    await updateBidStatus(winningBidId, BID_STATUS.RFQ_COMPLETED)
     
-    await logAuction(ACTIONS.COMPLETE_RFQ, { rfqNo: rfqNo, bidId: 0 })
+    logs.addingAuctions && await logAuction(ACTIONS.COMPLETE_RFQ, { rfqNo: rfqNo, bidId: 0 })
 }
 
 async function cancelRfq(rfqNo) {
@@ -2221,7 +2446,7 @@ async function cancelRfq(rfqNo) {
         await updateBidStatus(bids[i].bidId, BID_STATUS.RFQ_CANCELED)
     }
     
-    await logAuction(ACTIONS.CANCEL_RFQ, { rfqNo: rfqNo, bidId: 0 })
+    logs.addingAuctions && await logAuction(ACTIONS.CANCEL_RFQ, { rfqNo: rfqNo, bidId: 0 })
 }
 
 async function scoreRfq(rfqNo) {
@@ -2356,11 +2581,12 @@ async function pushOfferKpiScore(offerId, kpiScore) {
 
     let weiKpiScore = provider.utils.toWei(kpiScore.toString(), "ether")
 
-    result = await contracts.bids.contract.methods.pushOfferKpiScore(offerId, weiKpiScore).send({
+    let receipt = await contracts.bids.contract.methods.pushOfferKpiScore(offerId, weiKpiScore).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    addReceipt(`bids.pushOfferKpiScore`, receipt)
 
 }
 async function setOfferKpiScores(offerId, kpiScores) {
@@ -2374,11 +2600,12 @@ async function setOfferKpiScores(offerId, kpiScores) {
     //console.log("kpiScores", kpiScores)
     //console.log("weiKpiScores", weiKpiScores)
 
-    result = await contracts.bids.contract.methods.setOfferKpiScores(offerId, weiKpiScores).send({
+    let receipt = await contracts.bids.contract.methods.setOfferKpiScores(offerId, weiKpiScores).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    addReceipt(`bids.setOfferKpiScore`, receipt)
 
 }
 
@@ -2395,22 +2622,25 @@ async function clearAllKpiScores(rfqNo) {
 }
 
 async function clearOfferKpiScores(offerId) {
-    result = await contracts.bids.contract.methods.clearOfferKpiScores(offerId).send({
+    let receipt = await contracts.bids.contract.methods.clearOfferKpiScores(offerId).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    
+    addReceipt(`bids.clearOfferKpiScores`, receipt)
 }
 
 async function setBidScore(bidId, score) {
 
     let weiScore = provider.utils.toWei(score.toString(), "ether")
     
-    result = await contracts.bids.contract.methods.setBidScore(bidId, weiScore).send({
+    let receipt = await contracts.bids.contract.methods.setBidScore(bidId, weiScore).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    addReceipt(`bids.setBidScore`, receipt)
 
 
 }
@@ -2419,39 +2649,45 @@ async function setOfferScore(offerId, score) {
 
     let weiScore = provider.utils.toWei(score.toString(), "ether")
     
-    result = await contracts.bids.contract.methods.setOfferScore(offerId, weiScore).send({
+    let receipt = await contracts.bids.contract.methods.setOfferScore(offerId, weiScore).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    
+    addReceipt(`bids.setOfferScore`, receipt)
 
 }
 
 async function setWinningBidId(rfqNo, bidId) {
     
-    result = await contracts.rfqs.contract.methods.setWinningBidId(rfqNo, bidId).send({
+    let receipt = await contracts.rfqs.contract.methods.setWinningBidId(rfqNo, bidId).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    addReceipt(`rfqs.setWinningBidId`, receipt)
+
 
 }
 
 async function updateRfqStatus(rfqNo, status) {
-    result = await contracts.rfqs.contract.methods.updateRfqStatus(rfqNo, status).send({
+    let receipt = await contracts.rfqs.contract.methods.updateRfqStatus(rfqNo, status).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    addReceipt(`rfqs.updateRfqStatus`, receipt)
 
 }
 
 async function updateBidStatus(bidId, status) {
-    result = await contracts.bids.contract.methods.updateBidStatus(bidId, status).send({
+    let receipt = await contracts.bids.contract.methods.updateBidStatus(bidId, status).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    addReceipt(`bids.updateBidStatus`, receipt)
 
 }
 
@@ -2461,25 +2697,39 @@ async function updateOfferStatus(offerId, status) {
 
 async function setSellerRating(bidId, rating, comments) {
     let weiRating = provider.utils.toWei(rating.toString(), "ether")
-    result = await contracts.bids.contract.methods.setSellerRating(bidId, weiRating, comments).send({
+    let receipt = await contracts.bids.contract.methods.setSellerRating(bidId, weiRating, comments).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    addReceipt(`bids.setSellerRating`, receipt)
 }
 async function setBuyerRating(bidId, rating, comments) {
     let weiRating = provider.utils.toWei(rating.toString(), "ether")
-    result = await contracts.bids.contract.methods.setBuyerRating(bidId, weiRating, comments).send({
+    let receipt = await contracts.bids.contract.methods.setBuyerRating(bidId, weiRating, comments).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    addReceipt(`bids.setBuyerRating`, receipt)
 }
 async function setAfterSaleRating(bidId, rating, comments) {
     let weiRating = provider.utils.toWei(rating.toString(), "ether")
-    result = await contracts.bids.contract.methods.setAfterSaleRating(bidId, weiRating, comments).send({
+    let receipt = await contracts.bids.contract.methods.setAfterSaleRating(bidId, weiRating, comments).send({
         from: getCurrentUser(),
         gas: 1000000,
         gasPrice: 10000000000,
     })
+    addReceipt(`bids.setAfterSaleRating`, receipt)
+}
+
+function addReceipt(func, receipt) {
+    let receipts = []
+    if(!txReceipts.has(func)) {
+        receipts.push(receipt)
+    } else {
+        receipts = txReceipts.get(func)
+        receipts.push(receipt)
+    }
+    txReceipts.set(func, receipts)
 }
