@@ -34,8 +34,15 @@ contract RFQs {
     function getAuthority() public view returns(address) {
         return authority;
     }
+	function isAuthority() private view returns (bool) {
+		if(authority == msg.sender) {
+			return true;
+		}
+		return false;
+	}
 
 	function initKpiGroup(string memory group, string[] memory kpis) public {
+		require(isAuthority(), "Only authority can initialize KPIs.");
 		kpiGroups.push(group);
 		kpiNames.push(kpis);
 	}
@@ -45,9 +52,8 @@ contract RFQs {
 	function getKpiGroups() public view returns(string[] memory) {
 		return kpiGroups;
 	}
-	function addRFQ(string memory docURI, string memory externalId) public 
-	//userIsVerified userIsBuyer 
-	returns(uint) {
+	function addRFQ(string memory docURI, string memory externalId) public returns(uint) {
+		require(canAddRfq(), "Cannot add RFQ. User does not exist, not verified, or is not a buyer.");
 
 		uint RFQNo = rfqNos.length > 0 ? rfqNos.length + 1 : 1;		
 		RFQ_STATUS status = RFQ_STATUS.NEW;
@@ -64,17 +70,12 @@ contract RFQs {
 	}
 
 	function addBidId(uint bidId, uint rfqNo) public {
+		require(isCreator(rfqNo), "User not the creator of the RFQ");
 		rfqs[rfqNo].bidIds.push(bidId);
 	}
 
 	function addRFQProduct(uint rfqNo, string memory barcode, uint quantity, string memory shipTo, uint idealLeadTime, uint idealShippingTime) public {	
-		//userIsVerified 
-		//userIsBuyer 
-		//validRFQNo(rfqProductArg.rfqNo) 
-		//validProductBarcode(rfqProductArg.barcode) 
-
-		//RFQ memory rfq = rfqs[rfqNo];
-		//require(rfq.buyer == msg.sender, "User not the creator of the RFQ");
+		require(isCreator(rfqNo), "User not the creator of the RFQ");
 		RFQProduct memory rfqProduct;
 
 		//Generating an Id for the rfqProduct object. Always starts at 1.
@@ -98,11 +99,8 @@ contract RFQs {
 		rfqs[rfqNo].rfqProductIds.push(rfqProductId);
 
 	}
-	function addRfqKpi(uint rfqNo, uint kpiGroupId, uint kpiId, uint weight, SCORE_RULE scoreRule, string memory comments) public 
-		//userIsVerified 
-		//userIsBuyer 
-		//validRFQNo(rfqNo) 
-		returns(bool) {
+	function addRfqKpi(uint rfqNo, uint kpiGroupId, uint kpiId, uint weight, SCORE_RULE scoreRule, string memory comments) public {
+		require(isCreator(rfqNo), "User not the creator of the RFQ");
 
 		uint rfqKpiId = rfqKpisIds.length > 0 ? rfqKpisIds.length + 1 : 1;
 		uint[] memory offerValues;
@@ -116,7 +114,6 @@ contract RFQs {
 		
 		rfqs[rfqNo].rfqKpiIds.push(rfqKpiId); 
 
-		return true;
 	}
 	function addOfferToKpi(uint rfqKpiId, uint value) public {
 		rfqKpis[rfqKpiId].offerValues.push(value);
@@ -135,6 +132,7 @@ contract RFQs {
 	}
 
 	function updateRfqStatus(uint rfqNo, RFQ_STATUS rfqStatus) public {
+		require(isCreator(rfqNo), "User not the creator of the RFQ");
 		rfqs[rfqNo].status = rfqStatus;
 	}
 	function increaseRound(uint rfqNo) public {
@@ -145,10 +143,34 @@ contract RFQs {
 		returns(uint[] memory) {
 			return rfqNos;
 	}
-	function getRFQ(uint rfqNo) public view  /*validRFQNo(rfqNo)*/ /*canRetrieveRFQ(RFQNo) //userIsVerified*/returns(RFQ memory) {
+	function getRFQ(uint rfqNo) public view returns(RFQ memory) {
 			return rfqs[rfqNo];
 	}
+	function getRfqBuyer(uint rfqNo) public view returns(address) {
+		address buyer = rfqs[rfqNo].buyer;
+		return buyer;
+	}
 	function setWinningBidId(uint rfqNo, uint bidId) public {
+		require(isCreator(rfqNo), "User not the creator of the RFQ");
 		rfqs[rfqNo].winningBidId = bidId;
+	}
+	function canAddRfq() private view returns(bool) {
+		address userAddress = msg.sender;
+		User memory user = users.getUser(userAddress);
+		if(user.userAddress == userAddress) {
+			if(user.verified) {
+				if(user.userType == USER_TYPE.BUYER) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	function isCreator(uint rfqNo) private view returns (bool) {
+		RFQ memory rfq = rfqs[rfqNo];
+		if(rfq.buyer == msg.sender) {
+			return true;
+		}
+		return false;
 	}
 }
