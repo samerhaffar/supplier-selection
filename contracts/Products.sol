@@ -14,7 +14,7 @@ struct Product {
 }
 
 contract Products {
-    address private authority;
+    address private immutable authority;
     
 
 
@@ -58,7 +58,8 @@ contract Products {
 		if(productSuppliers.length == 0) {
 			return false;
 		}
-		for(uint i = 0; i < productSuppliers.length; i++) {
+		uint arrayLength = productSuppliers.length;
+		for(uint i = 0; i < arrayLength; i++) {
 			if(productSuppliers[i] == supplierAddress) {
 				return true;
 			}
@@ -67,7 +68,8 @@ contract Products {
 	}
 
     function barcodeExists(string memory barcode) public view returns (bool) {
-		for(uint i = 0; i < barcodes.length; i++) {
+		uint arrayLength = barcodes.length;
+		for(uint i = 0; i < arrayLength; i++) {
 			if(compareStrings(barcodes[i], barcode)) {
 				return true;
 			}

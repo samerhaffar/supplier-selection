@@ -8,6 +8,74 @@ pragma solidity >= 0.7.0 < 0.9.0;
 
 contract Test {
 
+
+    /**
+     *
+     * CODE FOR CONTROLLING BID STATUS UPDATES
+     * 
+     * if(status == BID_STATUS.SUBMITTED) {
+                if(bids[bidId].status == BID_STATUS.NEW) {
+                    statusValid == true;
+                } else {
+                    message = "Bid Status must be NEW when trying to set it as SUBMITTED";
+                }
+                message = "Failed here";
+            }
+            if(status == BID_STATUS.AUCTION_COUNTEROFFER) {
+                if((currentBidStatus == BID_STATUS.AUCTION_WON) || (currentBidStatus == BID_STATUS.AUCTION_LOST)) {
+                    statusValid == true;
+                }
+                message = "Bid Status must be AUCTION_WON or AUCTION_LOST when trying to set it as AUCTION_COUNTEROFFER";
+            }
+            if(status == BID_STATUS.WITHDRAWN) {
+                if(currentBidStatus != BID_STATUS.NEW) {
+                    statusValid == true;
+                }
+                message = "Bid cannot be NEW when trying to set it as WITHDRAWN";
+            }
+            if(status == BID_STATUS.BUYER_RATED) {
+                if(currentBidStatus == BID_STATUS.SELLER_RATED) {
+                    statusValid == true;
+                }
+                message = "Bid Status must be SELLER_RATED when trying to set it as BUYER_RATED";
+            }
+        } else  if(userAddress == bids[bidId].buyer) {
+            if((status == BID_STATUS.AUCTION_WON) || (status == BID_STATUS.AUCTION_LOST)) {            
+                if((currentBidStatus == BID_STATUS.SUBMITTED) || (currentBidStatus == BID_STATUS.AUCTION_WON) || (status == BID_STATUS.AUCTION_LOST)) {
+                    statusValid == true;
+                }
+                message = "Bid Status must be SUBMITTED, AUCTION_WON or AUCTION_LOST when trying to set it as AUCTION_WON or AUCTION_LOST";
+            }
+            if((status == BID_STATUS.AWARDED) || (status == BID_STATUS.LOST)) {            
+                if((currentBidStatus == BID_STATUS.SUBMITTED) || (currentBidStatus == BID_STATUS.AUCTION_WON) || (status == BID_STATUS.AUCTION_LOST)) {
+                    statusValid == true;
+                }
+                message = "Bid Status must be SUBMITTED, AUCTION_WON or AUCTION_LOST when trying to set it as AWARDED or LOST";
+            }
+            if(status == BID_STATUS.SELLER_RATED) {
+                if(currentBidStatus == BID_STATUS.AWARDED) {
+                    statusValid == true;
+                }
+                message = "Bid Status must be AWARDED when trying to set it as SELLER_RATED";
+            }
+            if(status == BID_STATUS.AFTER_SALE_RATED) {
+                if(currentBidStatus == BID_STATUS.BUYER_RATED) {
+                    statusValid == true;
+                }
+                message = "Bid Status must be BUYER_RATED when trying to set it as AFTER_SALE_RATED";
+            }
+            if(status == BID_STATUS.RFQ_COMPLETED) {
+                if(currentBidStatus == BID_STATUS.AFTER_SALE_RATED) {
+                    statusValid == true;
+                }
+                message = "Bid Status must be AFTER_SALE_RATED when trying to set it as RFQ_COMPLETED";
+            }
+     * 
+     * 
+     * 
+     * 
+     */
+
     /*
     we initiate the kpis array on the RFQ; then, we use the reference to the kpi as a reference to value/score pairs for each kpi at the bid; example
     uint kpis[0] = "totalPrice";

@@ -9,6 +9,7 @@ lerna-debug.log*
 
 node_modules
 compiled
+outputFiles
 blc_backups_11102023
 trash
 other

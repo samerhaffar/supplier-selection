@@ -8,7 +8,23 @@ pragma solidity >= 0.7.0 < 0.9.0;
 
 enum USER_TYPE { BUYER, SELLER }
 enum SCORE_RULE {ASCENDING, DESCENDING}  //Descending means largest value gets highest score; Ascending means lowest value gets highest score
-enum BID_FILE_TYPE { TECHNICAL_PROPOSAL, FINANCIAL_PROPOSAL, SIX_SIGMA_CERTIFICATE, QUALITY_CERTIFICATE, SAFETY_CERTIFICATE, ENVIRONMENTAL_AUDIT }
+enum BID_FILE_TYPE { 
+    QMS_CERTIFICATE,
+    EMISSIONS_AUDIT_REPORT,
+    ENERGY_CONSUMPTION_REPORT,
+    EMS_CERTIFICATE,
+    WASTE_MANAGEMENT_POLICY,
+    OHSMS_CERTIFICATE,
+    HR_POLICY,
+    INFORMATION_DISCLOSURE_AGREEMENT,
+    SOCIAL_RESPONSIBILITY_PROOF,
+    INFORMATION_SYSTEM_SPECS,
+    PRODUCTION_POLICY,
+    PRODUCTION_PLAN,
+    INVENTORY_SHEET,
+    MACHINE_SPECS,
+    ORGANIGRAM
+}
 
 enum ACTION {
     ADD_RFQ,
@@ -35,9 +51,7 @@ enum RFQ_STATUS {
     WINNER_DECLARED,
     CANCELED,
     WIINNER_WITHDRAWN,
-    SELLER_RATED,
-    BUYER_RATED,
-    AFTER_SALE_RATED,
+    RATINGS,
     COMPLETED
 }
 enum BID_STATUS { 
@@ -65,6 +79,8 @@ struct User {
     bool verified;
     uint rating; //updated with each bid	
     uint afterSaleRating; //same as above (for buyers and sellers alike, if they don't provide a rating, theirs would be 1; once they provide, their rating is updated)	
+    uint[] bidIds;
+    uint[] rfqNos;
 }
 
 struct Product {
@@ -121,6 +137,7 @@ struct Bid {
     BID_STATUS status;
     uint acceptedOfferId;
     address seller;
+    address buyer;
     uint[] bidProductIds;
     uint[] bidFileIds;
     uint[] offerIds; 
@@ -146,6 +163,7 @@ struct BidProduct {
     uint shippingTime;
     uint inventory;
     uint customizations;
+    string customizationsDescription;
     uint minQuantity;
 }
 
@@ -165,7 +183,7 @@ struct Offer {
     uint[] kpiValues;
     uint[] kpiScores;
 }
-
+/*
 struct Score {
     uint scoreId; //the score
     uint rfqKpiId; //the kpi we're evaluating
@@ -175,7 +193,7 @@ struct Score {
     bool automated;
     string comments;
 }
-
+*/
 contract Types {
 
 }
