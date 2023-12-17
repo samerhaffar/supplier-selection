@@ -9,8 +9,10 @@ lerna-debug.log*
 
 node_modules
 compiled
-outputFiles
+outputFiles/*
+ganache_logs
 blc_backups_11102023
+test.js
 trash
 other
 bin
