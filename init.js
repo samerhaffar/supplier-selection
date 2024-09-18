@@ -3519,13 +3519,25 @@ async function calculateAfterSaleRating(bid) {
         return 0
     }
     let bids = await getBids(bidIds, true)
+
     let total = 0
+    let detractors = 0
+    let promoters = 0
     let rating = 0
     for(let i = 0; i < bids.length; i++) {
         let afterSaleRating = bids[i].afterSaleRating
-        total += afterSaleRating
+        if (parseInt(afterSaleRating) <= 6) {
+            detractors++
+        }
+        if(parseInt(afterSaleRating) >= 9) {
+            promoters++
+        }
+        total++
     }
-    rating = parseInt(total) / bids.length
+    rating = (promoters/total) - (detractors/total)
+    if(rating < 0) {
+        rating = 1
+    }
     return rating
 }
 
