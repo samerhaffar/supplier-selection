@@ -126,7 +126,7 @@ const countries = [
 const usersData = []
 const productsData = []
 const noBuyers = 1
-const noSellers = 98
+const noSellers = 10
 const noProductsPerSeller = {min: 5, max: 5}
 const noVerifiedUsers = 100
 
@@ -3446,13 +3446,24 @@ async function calculateSellerRating(bid) {
     }
     let bids = await getBids(bidIds, true)
     let total = 0
+    let detractors = 0
+    let promoters = 0
     let rating = 0
     for(let i = 0; i < bids.length; i++) {
         let sellerRating = bids[i].sellerRating
-        total += sellerRating
+        if (parseInt(sellerRating) <= 6) {
+            detractors++
+        }
+        if(parseInt(sellerRating) >= 9) {
+            promoters++
+        }
+        total++
     }
     
-    rating = parseInt(total) / bids.length
+    rating = (promoters/total) - (detractors/total)
+    if(rating < 0) {
+        rating = 1
+    }
     return rating
 }
 
@@ -3481,12 +3492,23 @@ async function calculateBuyerRating(rfq) {
     }
 
     let total = 0
+    let detractors = 0
+    let promoters = 0
     let rating = 0
     for(let i = 0; i < bids.length; i++) {
         let buyerRating = bids[i].buyerRating
-        total += buyerRating
+        if (parseInt(buyerRating) <= 6) {
+            detractors++
+        }
+        if(parseInt(buyerRating) >= 9) {
+            promoters++
+        }
+        total++
     }
-    rating = parseInt(total) / bids.length
+    rating = (promoters/total) - (detractors/total)
+    if(rating < 0) {
+        rating = 1
+    }
     return rating
 }
 
