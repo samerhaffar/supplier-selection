@@ -126,15 +126,15 @@ const countries = [
 const usersData = []
 const productsData = []
 const noBuyers = 1
-const noSellers = 4
+const noSellers = 98
 const noProductsPerSeller = {min: 5, max: 5}
-const noVerifiedUsers = 11
+const noVerifiedUsers = 100
 
 const noRfqsPerBuyer = { min: 1, max: 1 }
 const noProductsPerRfq =  { min: 5, max: 5 }
 const noKpisPerRfq =  { min: 26, max: 26 } //max cannot be more than kpis.length
 
-const noBidsPerRFQ = { min: 4, max: 4 }
+const noBidsPerRFQ = { min: 6, max: 6 }
 const noFilesPerBid = { min: 5, max: 14 }
 
 const feesPerGas = 20 //In Gwei
@@ -149,7 +149,8 @@ const auctionPaths = {
     path5: 1, //PATH 5: RFQ TO AUCTION TO AUCTION TO MANUAL SCORES TO WINNER TO COMPLETED
     path6: 0, //PATH 6: RFQ TO WINNER TO WINNER WITHDRAWN TO COMPLETED
     path7: 0, //PATH 7: RFQ TO WINNER TO TO CANCELED
-    path8: 0  //PATH 8: (REQUIRES MIN OF 5 BIDS)RFQ TO AUCTION * 3 (1 OFFER, 3 OFFERS,  1 OFFERS) TO MANUAL SCORES TO WINNER
+    path8: 0, //PATH 8: (REQUIRES MIN OF 5 BIDS)RFQ TO AUCTION * 3 (1 OFFER, 3 OFFERS,  1 OFFERS) TO MANUAL SCORES TO WINNER
+    path9: 0  //PATH 9: (not implemented) RFQ TO AUCTION * 5 TO MANUAL SCORES TO WINNER TO COMPLETED
 }
 
 const txReceipts = new Map()
@@ -194,7 +195,7 @@ const USER_TYPE = {
 
 
 
-const networkURL = "http://localhost:7545"   // "http://192.168.8.159:4792"
+const networkURL = "http://localhost:7545"//"http://10.211.55.4:7545"//"http://192.168.8.159:4792"//   // 
 const provider = new Web3(new Web3.providers.HttpProvider(networkURL))
 provider.eth.Contract.handleRevert = true
 
@@ -772,7 +773,10 @@ async function addBids() {
                     }*/
                     //console.log("kpiValues", kpiValues)
 
+                    logs.addingBidsVerbose && console.log(`KPI Values: ${kpiValues}`)
                     await addOffer(bid.bidId, kpiValues)
+                    logs.addingBidsVerbose && console.log(`Successfully added offer`)
+
         
                     noBidsAdded++
 
@@ -1271,6 +1275,9 @@ async function addAuctions() {
         await completeRfq(rfqNo)
 
     }
+
+
+
 }
 
 async function setBuyerAsCurrentUser(rfqNo) {
@@ -2543,7 +2550,7 @@ async function addOffer(bidId, kpiValues) {
 
     let receipt = await contracts.bids.contract.methods.addOffer(bidId, kpiValues).send({
         from: getCurrentUser(),
-        gas: 1000000,
+        gas: 2000000,
         gasPrice: 10000000000,
     })
 
