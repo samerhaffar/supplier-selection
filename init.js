@@ -126,7 +126,7 @@ const countries = [
 const usersData = []
 const productsData = []
 const noBuyers = 1
-const noSellers = 10
+const noSellers = 3
 const noProductsPerSeller = {min: 5, max: 5}
 const noVerifiedUsers = 100
 
